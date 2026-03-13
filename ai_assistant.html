@@ -668,19 +668,15 @@
     <label class="up-label">🔑 アクセスコード</label>
     <input type="password" class="up-input" id="upPin" placeholder="担当者から受け取ったコードを入力" />
 
-    <label class="up-label">📄 PDFファイルを選択</label>
+    <label class="up-label">📄 PDFファイルを選択（複数可）</label>
     <div class="up-drop" id="upDrop">
-      <input type="file" id="upFileInput" accept=".pdf,application/pdf" onchange="onUpFileSelected(event)" />
+      <input type="file" id="upFileInput" accept=".pdf,application/pdf" multiple onchange="onUpFileSelected(event)" />
       <div class="up-drop-icon">📂</div>
       <div class="up-drop-text">タップしてPDFを選ぶ</div>
-      <div class="up-drop-hint">またはここにドラッグ＆ドロップ</div>
+      <div class="up-drop-hint">複数ファイル選択可・ドラッグ＆ドロップも対応</div>
     </div>
 
-    <div class="up-file-info" id="upFileInfo">
-      <span>📄</span>
-      <span class="up-file-name" id="upFileName"></span>
-      <span class="up-file-size" id="upFileSize"></span>
-    </div>
+    <div id="upFileList" style="margin-top:10px;display:none;"></div>
 
     <div class="up-progress" id="upProgress">
       <div class="up-progress-bar">
@@ -1043,7 +1039,7 @@ function showToast(msg) {
 // ============================================================
 // アップロードパネル
 // ============================================================
-var upSelectedFile = null;
+var upSelectedFiles = []; // 複数ファイル対応
 
 function openUpload() {
   document.getElementById('uploadOverlay').classList.add('open');
@@ -1055,22 +1051,44 @@ function closeUpload() {
 }
 
 function onUpFileSelected(e) {
-  var file = e.target.files[0];
-  if (!file) return;
-  if (!file.type.includes('pdf')) {
-    showUpMsg('PDFファイルのみアップロード可能です', 'error');
-    return;
-  }
-  if (file.size > 50 * 1024 * 1024) {
-    showUpMsg('ファイルサイズが50MBを超えています', 'error');
-    return;
-  }
-  upSelectedFile = file;
-  document.getElementById('upFileName').textContent = file.name;
-  document.getElementById('upFileSize').textContent = (file.size / 1024 / 1024).toFixed(1) + ' MB';
-  document.getElementById('upFileInfo').classList.add('show');
-  document.getElementById('upBtn').disabled = false;
-  hideUpMsg();
+  var files = Array.from(e.target.files || []);
+  if (!files.length) return;
+
+  var errors = [];
+  var valid  = [];
+  files.forEach(function(f) {
+    if (!f.type.includes('pdf') && !f.name.toLowerCase().endsWith('.pdf')) {
+      errors.push(f.name + '：PDFではありません');
+    } else if (f.size > 50 * 1024 * 1024) {
+      errors.push(f.name + '：50MB超');
+    } else {
+      valid.push(f);
+    }
+  });
+
+  upSelectedFiles = valid;
+  renderFileList();
+
+  if (errors.length) showUpMsg('⚠️ スキップ: ' + errors.join(' / '), 'error');
+  else hideUpMsg();
+
+  document.getElementById('upBtn').disabled = (valid.length === 0);
+}
+
+function renderFileList() {
+  var el = document.getElementById('upFileList');
+  if (!upSelectedFiles.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = upSelectedFiles.map(function(f, i) {
+    var mb = (f.size / 1024 / 1024).toFixed(1);
+    return '<div id="upfi_' + i + '" style="display:flex;align-items:center;gap:8px;padding:8px 10px;'
+      + 'background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;margin-bottom:6px;font-size:13px;">'
+      + '<span>📄</span>'
+      + '<span style="flex:1;font-weight:700;color:#166534;word-break:break-all;">' + escHtml(f.name) + '</span>'
+      + '<span style="color:#6b7280;font-size:11px;white-space:nowrap;">' + mb + ' MB</span>'
+      + '<span id="upfi_status_' + i + '" style="font-size:18px;">⏳</span>'
+      + '</div>';
+  }).join('');
 }
 
 // ドラッグ＆ドロップ
@@ -1082,80 +1100,93 @@ function onUpFileSelected(e) {
   drop.addEventListener('drop', function(e) {
     e.preventDefault();
     drop.classList.remove('dragover');
-    var file = e.dataTransfer.files[0];
-    if (file) onUpFileSelected({ target: { files: [file] } });
+    var files = e.dataTransfer.files;
+    if (files && files.length) onUpFileSelected({ target: { files: files } });
   });
 })();
 
 async function doUpload() {
-  if (!upSelectedFile) return;
+  if (!upSelectedFiles.length) return;
   var pin = document.getElementById('upPin').value.trim();
   if (!pin) { showUpMsg('アクセスコードを入力してください', 'error'); return; }
 
   var btn = document.getElementById('upBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="up-spinner"></span> アップロード中...';
+  var total   = upSelectedFiles.length;
+  var success = 0;
+  var failed  = [];
 
   var prog     = document.getElementById('upProgress');
   var fill     = document.getElementById('upProgressFill');
   var progText = document.getElementById('upProgressText');
   prog.classList.add('show');
-  fill.style.width = '10%';
-  progText.textContent = 'ファイルを読み込み中...';
   hideUpMsg();
 
-  try {
-    // Base64変換
-    var base64 = await new Promise(function(resolve, reject) {
-      var reader = new FileReader();
-      reader.onload  = function() { resolve(reader.result.split(',')[1]); };
-      reader.onerror = reject;
-      reader.readAsDataURL(upSelectedFile);
-    });
-    fill.style.width = '40%';
-    progText.textContent = 'サーバーへ送信中...';
+  for (var i = 0; i < total; i++) {
+    var file = upSelectedFiles[i];
+    var statusEl = document.getElementById('upfi_status_' + i);
+    if (statusEl) statusEl.textContent = '⏫';
 
-    var res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action:   'uploadPdf',
-        fileName: upSelectedFile.name,
-        fileData: base64,
-        pin:      pin,
-        userId:   userId
-      })
-    });
-    fill.style.width = '85%';
-    progText.textContent = '保存中...';
+    fill.style.width = Math.round((i / total) * 90) + '%';
+    progText.textContent = '(' + (i + 1) + '/' + total + ') ' + file.name + ' を送信中...';
 
-    var data = await res.json();
-    fill.style.width = '100%';
+    try {
+      var base64 = await new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload  = function() { resolve(reader.result.split(',')[1]); };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
 
-    if (data.success) {
-      progText.textContent = '完了！';
-      showUpMsg('✅「' + upSelectedFile.name + '」のアップロードが完了しました！\nAIへの反映には数時間かかります。', 'success');
-      // リセット
-      upSelectedFile = null;
-      document.getElementById('upFileInput').value = '';
-      document.getElementById('upFileInfo').classList.remove('show');
-      document.getElementById('upPin').value = '';
-      btn.innerHTML = '⬆️ アップロードする';
-      setTimeout(function() {
-        prog.classList.remove('show');
-        fill.style.width = '0%';
-      }, 2500);
-      showToast('アップロード完了！');
-    } else {
-      throw new Error(data.error || 'アップロードに失敗しました');
+      var res  = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action:   'uploadPdf',
+          fileName: file.name,
+          fileData: base64,
+          pin:      pin,
+          userId:   userId
+        })
+      });
+      var data = await res.json();
+
+      if (data.success) {
+        success++;
+        if (statusEl) statusEl.textContent = '✅';
+      } else {
+        failed.push(file.name + '：' + (data.error || '失敗'));
+        if (statusEl) statusEl.textContent = '❌';
+      }
+    } catch(err) {
+      failed.push(file.name + '：通信エラー');
+      if (statusEl) statusEl.textContent = '❌';
     }
-  } catch(e) {
-    fill.style.width = '0%';
-    prog.classList.remove('show');
-    showUpMsg('❌ エラー: ' + e.message, 'error');
-    btn.disabled = false;
-    btn.innerHTML = '⬆️ アップロードする';
   }
+
+  fill.style.width = '100%';
+  progText.textContent = '完了！';
+  btn.disabled = false;
+  btn.innerHTML = '⬆️ アップロードする';
+
+  if (failed.length === 0) {
+    showUpMsg('✅ ' + success + '件すべてアップロード完了！\nAIへの反映には数時間かかります。', 'success');
+    showToast(success + '件アップロード完了！');
+  } else {
+    showUpMsg(
+      '✅ ' + success + '件成功 / ❌ ' + failed.length + '件失敗\n失敗: ' + failed.join(', '),
+      success > 0 ? 'success' : 'error'
+    );
+  }
+
+  // リセット
+  upSelectedFiles = [];
+  document.getElementById('upFileInput').value = '';
+  document.getElementById('upPin').value = '';
+  setTimeout(function() {
+    prog.classList.remove('show');
+    fill.style.width = '0%';
+  }, 3000);
 }
 
 function showUpMsg(text, type) {
