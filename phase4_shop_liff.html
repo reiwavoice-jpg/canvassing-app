@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>サービスカタログ</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: #f5f6fa;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* ── ヘッダー ────────────────────────── */
+    .header {
+      background: linear-gradient(135deg, #1a237e, #283593);
+      color: white;
+      padding: 16px 20px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .header h1 { font-size: 18px; font-weight: bold; }
+    .header small { font-size: 12px; opacity: 0.8; display: block; margin-top: 2px; }
+
+    /* ── タブ ───────────────────────────── */
+    .tabs {
+      display: flex;
+      background: white;
+      border-bottom: 2px solid #e8eaf6;
+      position: sticky;
+      top: 60px;
+      z-index: 99;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 14px 8px;
+      border: none;
+      background: none;
+      font-size: 14px;
+      font-weight: 600;
+      color: #888;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      color: #1a237e;
+      border-bottom-color: #1a237e;
+    }
+
+    /* ── コンテンツ ─────────────────────── */
+    .content { padding: 16px; max-width: 480px; margin: 0 auto; }
+
+    /* ── カタログカード ─────────────────── */
+    .catalog-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .product-card {
+      background: white;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      position: relative;
+      overflow: hidden;
+    }
+    .product-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      background: linear-gradient(to bottom, #1a237e, #5c6bc0);
+    }
+
+    .badge {
+      display: inline-block;
+      background: #ff6f00;
+      color: white;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 100px;
+      margin-bottom: 6px;
+    }
+    .badge.empty { display: none; }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .card-icon { font-size: 32px; flex-shrink: 0; }
+    .card-title-wrap { flex: 1; }
+    .card-category { font-size: 11px; color: #888; margin-bottom: 2px; }
+    .card-name { font-size: 16px; font-weight: bold; color: #1a237e; line-height: 1.3; }
+
+    .card-desc {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+      white-space: pre-line;
+      margin-bottom: 12px;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-price {
+      font-size: 20px;
+      font-weight: bold;
+      color: #1a237e;
+    }
+    .card-price span { font-size: 13px; font-weight: normal; color: #888; }
+
+    .btn-order {
+      background: linear-gradient(135deg, #1a237e, #3949ab);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-order:active { transform: scale(0.97); }
+
+    /* ── 注文履歴タブ ─────────────────── */
+    .history-empty {
+      text-align: center;
+      padding: 48px 16px;
+      color: #aaa;
+    }
+    .history-empty .icon { font-size: 44px; display: block; margin-bottom: 12px; }
+
+    .order-card {
+      background: white;
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .order-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .order-id   { font-size: 11px; color: #aaa; }
+    .order-status {
+      font-size: 11px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 100px;
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .order-product { font-size: 15px; font-weight: bold; margin-bottom: 4px; }
+    .order-detail  { font-size: 13px; color: #666; }
+    .order-amount  { font-size: 14px; color: #1a237e; font-weight: bold; margin-top: 4px; }
+
+    /* ── カスタム注文フォーム ────────────── */
+    .form-section { background: white; border-radius: 14px; padding: 20px; margin-bottom: 12px; }
+    .form-title { font-size: 15px; font-weight: bold; margin-bottom: 4px; }
+    .form-sub   { font-size: 13px; color: #888; margin-bottom: 14px; }
+
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 6px;
+    }
+    .form-label .required {
+      color: #e53935;
+      margin-left: 4px;
+      font-size: 12px;
+    }
+    textarea, input[type=text], input[type=date] {
+      width: 100%;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+      background: #fafafa;
+    }
+    textarea:focus, input:focus { border-color: #1a237e; background: white; }
+    textarea { min-height: 120px; resize: vertical; }
+
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #1a237e, #3949ab);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 4px;
+      transition: all 0.2s;
+    }
+    .btn-submit:active { transform: scale(0.98); }
+    .btn-submit:disabled { background: #9fa8da; cursor: not-allowed; }
+
+    /* ── モーダル（注文確認） ────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 200;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-overlay.open {
+      display: flex;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to   { transform: translateY(0);   opacity: 1; }
+    }
+    .modal {
+      background: white;
+      border-radius: 20px 20px 0 0;
+      padding: 24px 20px 36px;
+      width: 100%;
+      max-width: 480px;
+    }
+    .modal-drag {
+      width: 40px; height: 4px;
+      background: #ddd;
+      border-radius: 100px;
+      margin: 0 auto 20px;
+    }
+    .modal-title { font-size: 18px; font-weight: bold; margin-bottom: 16px; }
+
+    .modal-product-name {
+      font-size: 16px;
+      font-weight: bold;
+      color: #1a237e;
+      padding: 12px;
+      background: #e8eaf6;
+      border-radius: 10px;
+      margin-bottom: 14px;
+    }
+
+    .modal-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #f5f5f5;
+      font-size: 14px;
+    }
+    .modal-row .label { color: #888; }
+    .modal-row .value { font-weight: 600; }
+
+    .modal-total {
+      font-size: 20px;
+      font-weight: bold;
+      color: #1a237e;
+      text-align: right;
+      margin: 14px 0;
+    }
+    .modal-total small { font-size: 14px; color: #888; font-weight: normal; }
+
+    .modal-memo textarea {
+      min-height: 80px;
+      margin-top: 6px;
+    }
+    .modal-qty-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 6px;
+    }
+    .qty-btn {
+      width: 40px; height: 40px;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      background: white;
+      font-size: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qty-display {
+      font-size: 22px;
+      font-weight: bold;
+      min-width: 32px;
+      text-align: center;
+    }
+
+    .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+    .btn-cancel {
+      flex: 1;
+      background: white;
+      border: 2px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-confirm {
+      flex: 2;
+      background: linear-gradient(135deg, #1a237e, #3949ab);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    /* ── 完了 / エラー ────────────────── */
+    .result-card {
+      display: none;
+      background: white;
+      border-radius: 14px;
+      padding: 32px 20px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .result-card.show { display: block; }
+    .result-icon  { font-size: 54px; margin-bottom: 12px; }
+    .result-title { font-size: 18px; font-weight: bold; margin-bottom: 8px; }
+    .result-sub   { font-size: 14px; color: #666; white-space: pre-line; }
+    .btn-back {
+      display: inline-block;
+      margin-top: 20px;
+      background: #e8eaf6;
+      color: #1a237e;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 28px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    /* ── ローディング ─────────────────── */
+    .loading {
+      text-align: center;
+      padding: 48px;
+      color: #aaa;
+      font-size: 14px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 4px solid #e8eaf6;
+      border-top-color: #1a237e;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ── ヘッダー ──────────────────────────────── -->
+<div class="header">
+  <h1>🛒 サービスカタログ</h1>
+  <small>コーチング・選挙サポート・政策支援</small>
+</div>
+
+<!-- ── タブ ────────────────────────────────── -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('catalog')" id="tabCatalog">🛍 カタログ</button>
+  <button class="tab-btn"        onclick="switchTab('custom')"  id="tabCustom">💬 カスタム注文</button>
+  <button class="tab-btn"        onclick="switchTab('history')" id="tabHistory">📋 注文履歴</button>
+</div>
+
+<div class="content">
+
+  <!-- ── カタログ ─────────────────────────────── -->
+  <div id="catalogSection">
+    <div class="loading" id="catalogLoading">
+      <div class="spinner"></div>
+      カタログを読み込み中...
+    </div>
+    <div class="catalog-grid" id="catalogGrid" style="display:none"></div>
+  </div>
+
+  <!-- ── カスタム注文フォーム ──────────────────── -->
+  <div id="customSection" style="display:none">
+
+    <div class="result-card" id="customResult">
+      <div class="result-icon">✅</div>
+      <div class="result-title">お問い合わせを受け付けました</div>
+      <div class="result-sub" id="customResultSub">担当スタッフから2営業日以内にご連絡いたします。</div>
+      <button class="btn-back" onclick="resetCustomForm()">📝 新しい問い合わせ</button>
+    </div>
+
+    <div id="customForm">
+      <div class="form-section">
+        <div class="form-title">💬 カスタム注文・問い合わせ</div>
+        <div class="form-sub">定番にないご要望はこちらからお気軽にお送りください。</div>
+
+        <div class="form-group">
+          <label class="form-label">要望内容<span class="required">*必須</span></label>
+          <textarea id="customContent"
+                    placeholder="例）次の選挙に向けた有権者分析レポートを作成してほしい。目標票数は1,500票で…"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">希望日時</label>
+          <input type="date" id="customDate">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">予算感</label>
+          <input type="text" id="customBudget" placeholder="例）3〜5万円、予算未定など">
+        </div>
+
+        <button class="btn-submit" id="btnCustomSubmit" onclick="submitCustom()">
+          📨 送信する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 注文履歴 ────────────────────────────── -->
+  <div id="historySection" style="display:none">
+    <div class="loading" id="historyLoading" style="display:none">
+      <div class="spinner"></div>読み込み中...
+    </div>
+    <div id="historyList"></div>
+  </div>
+
+</div><!-- /content -->
+
+<!-- ── 注文確認モーダル ──────────────────────── -->
+<div class="modal-overlay" id="orderModal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-drag"></div>
+    <div class="modal-title">🛒 注文確認</div>
+
+    <div class="modal-product-name" id="modalProductName"></div>
+
+    <div class="modal-row">
+      <span class="label">単価</span>
+      <span class="value" id="modalPrice">—</span>
+    </div>
+
+    <div class="modal-row" style="align-items:center">
+      <span class="label">数量</span>
+      <div class="modal-qty-wrap">
+        <button class="qty-btn" onclick="changeQty(-1)">－</button>
+        <span class="qty-display" id="modalQty">1</span>
+        <button class="qty-btn" onclick="changeQty(1)">＋</button>
+        <span style="font-size:13px;color:#888" id="modalUnit"></span>
+      </div>
+    </div>
+
+    <div class="modal-total">
+      合計 <small>（税別）</small> ¥<span id="modalTotal">0</span>
+    </div>
+
+    <div class="modal-memo form-group">
+      <label class="form-label">備考（任意）</label>
+      <textarea id="modalMemo" placeholder="ご要望・質問があればご記入ください"></textarea>
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-cancel"  onclick="closeModalDirect()">キャンセル</button>
+      <button class="btn-confirm" onclick="confirmOrder()">注文する →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 注文完了オーバーレイ ─────────────────── -->
+<div class="modal-overlay" id="successModal">
+  <div class="modal" style="text-align:center;padding-bottom:40px">
+    <div class="modal-drag"></div>
+    <div style="font-size:52px;margin-bottom:12px" id="successIcon">✅</div>
+    <div style="font-size:18px;font-weight:bold;margin-bottom:8px">ご注文を受け付けました！</div>
+    <div style="font-size:14px;color:#666;white-space:pre-line" id="successDetail"></div>
+    <button class="btn-back" onclick="closeSuccessModal()" style="margin-top:20px">
+      カタログに戻る
+    </button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 設定
+// ============================================================
+const GAS_URL = 'YOUR_GAS_WEBAPP_URL'; // GASデプロイURLに変更
+const LIFF_ID = 'YOUR_LIFF_ID';        // LINE DevelopersのLIFF IDに変更
+
+// ============================================================
+// 状態
+// ============================================================
+let liffUserId  = 'unknown';
+let catalog     = [];
+let selectedProduct = null;
+let modalQty    = 1;
+
+// ============================================================
+// LIFF初期化
+// ============================================================
+(async function init() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (liff.isLoggedIn()) {
+      const profile = await liff.getProfile();
+      liffUserId = profile.userId;
+    } else {
+      liff.login();
+      return;
+    }
+  } catch(e) {
+    console.warn('LIFF init error:', e);
+  }
+  loadCatalog();
+})();
+
+// ============================================================
+// タブ切替
+// ============================================================
+function switchTab(tab) {
+  ['catalog','custom','history'].forEach(t => {
+    document.getElementById(t + 'Section').style.display = t === tab ? '' : 'none';
+    document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1))
+            .classList.toggle('active', t === tab);
+  });
+  if (tab === 'history') loadHistory();
+}
+
+// ============================================================
+// カタログ読み込み
+// ============================================================
+async function loadCatalog() {
+  try {
+    const resp = await fetch(GAS_URL + '?action=getCatalog');
+    const data = await resp.json();
+    if (data.success) {
+      catalog = data.catalog;
+      renderCatalog(catalog);
+    }
+  } catch(e) {
+    document.getElementById('catalogLoading').innerHTML =
+      '<div style="color:#e53935">❌ 読み込みに失敗しました。再読み込みしてください。</div>';
+  }
+}
+
+function renderCatalog(items) {
+  const grid = document.getElementById('catalogGrid');
+  grid.innerHTML = items.map(p => `
+    <div class="product-card">
+      <div class="badge ${p.badge ? '' : 'empty'}">${p.badge || ''}</div>
+      <div class="card-header">
+        <div class="card-icon">${p.icon}</div>
+        <div class="card-title-wrap">
+          <div class="card-category">${p.category}</div>
+          <div class="card-name">${p.name}</div>
+        </div>
+      </div>
+      <div class="card-desc">${p.description}</div>
+      <div class="card-footer">
+        <div class="card-price">
+          ¥${p.price.toLocaleString()}<span> / ${p.unit}</span>
+        </div>
+        <button class="btn-order" onclick="openOrderModal('${p.id}')">
+          注文する →
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('catalogLoading').style.display = 'none';
+  grid.style.display = 'flex';
+}
+
+// ============================================================
+// 注文モーダル
+// ============================================================
+function openOrderModal(productId) {
+  selectedProduct = catalog.find(p => p.id === productId);
+  if (!selectedProduct) return;
+
+  modalQty = 1;
+  document.getElementById('modalProductName').textContent =
+    selectedProduct.icon + ' ' + selectedProduct.name;
+  document.getElementById('modalPrice').textContent =
+    '¥' + selectedProduct.price.toLocaleString();
+  document.getElementById('modalUnit').textContent = selectedProduct.unit;
+  document.getElementById('modalMemo').value = '';
+  updateModalTotal();
+
+  document.getElementById('orderModal').classList.add('open');
+}
+
+function changeQty(delta) {
+  modalQty = Math.max(1, Math.min(10, modalQty + delta));
+  document.getElementById('modalQty').textContent = modalQty;
+  updateModalTotal();
+}
+
+function updateModalTotal() {
+  if (!selectedProduct) return;
+  const total = selectedProduct.price * modalQty;
+  document.getElementById('modalTotal').textContent = total.toLocaleString();
+}
+
+function closeModal(e) {
+  if (e.target === document.getElementById('orderModal')) closeModalDirect();
+}
+function closeModalDirect() {
+  document.getElementById('orderModal').classList.remove('open');
+}
+
+async function confirmOrder() {
+  if (!selectedProduct) return;
+  closeModalDirect();
+
+  const payload = {
+    action:    'submitOrder',
+    userId:    liffUserId,
+    productId: selectedProduct.id,
+    quantity:  modalQty,
+    memo:      document.getElementById('modalMemo').value.trim()
+  };
+
+  try {
+    const resp = await fetch(GAS_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+    const data = await resp.json();
+
+    if (data.success) {
+      document.getElementById('successIcon').textContent   = selectedProduct.icon + ' ✅';
+      document.getElementById('successDetail').textContent =
+        data.product + '\n数量: ' + modalQty + ' ' + selectedProduct.unit +
+        '\n合計: ¥' + (selectedProduct.price * modalQty).toLocaleString() +
+        '\n\n担当スタッフから2営業日以内にご連絡いたします。\n注文ID: ' + data.orderId;
+      document.getElementById('successModal').classList.add('open');
+    } else {
+      alert('エラー: ' + (data.error || '注文に失敗しました'));
+    }
+  } catch(e) {
+    alert('通信エラーが発生しました。電波状況をご確認ください。');
+  }
+}
+
+function closeSuccessModal() {
+  document.getElementById('successModal').classList.remove('open');
+}
+
+// ============================================================
+// カスタム注文
+// ============================================================
+async function submitCustom() {
+  const content = document.getElementById('customContent').value.trim();
+  if (!content) {
+    document.getElementById('customContent').focus();
+    alert('要望内容を入力してください');
+    return;
+  }
+
+  const btn = document.getElementById('btnCustomSubmit');
+  btn.disabled    = true;
+  btn.textContent = '送信中...';
+
+  const payload = {
+    action:      'submitCustomOrder',
+    userId:      liffUserId,
+    content:     content,
+    desiredDate: document.getElementById('customDate').value,
+    budget:      document.getElementById('customBudget').value.trim()
+  };
+
+  try {
+    const resp = await fetch(GAS_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+    const data = await resp.json();
+
+    if (data.success) {
+      document.getElementById('customResultSub').textContent =
+        '問い合わせID: ' + data.orderId + '\n\n' + data.message;
+      document.getElementById('customForm').style.display   = 'none';
+      document.getElementById('customResult').classList.add('show');
+    } else {
+      alert('エラー: ' + (data.error || '送信に失敗しました'));
+    }
+  } catch(e) {
+    alert('通信エラーが発生しました。');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '📨 送信する';
+  }
+}
+
+function resetCustomForm() {
+  document.getElementById('customContent').value = '';
+  document.getElementById('customDate').value    = '';
+  document.getElementById('customBudget').value  = '';
+  document.getElementById('customResult').classList.remove('show');
+  document.getElementById('customForm').style.display = '';
+}
+
+// ============================================================
+// 注文履歴
+// ============================================================
+async function loadHistory() {
+  const listEl = document.getElementById('historyList');
+  listEl.innerHTML = '';
+
+  document.getElementById('historyLoading').style.display = 'block';
+
+  try {
+    const resp = await fetch(`${GAS_URL}?action=getOrderHistory&userId=${encodeURIComponent(liffUserId)}`);
+    const data = await resp.json();
+
+    document.getElementById('historyLoading').style.display = 'none';
+
+    if (!data.success || data.orders.length === 0) {
+      listEl.innerHTML = `
+        <div class="history-empty">
+          <span class="icon">📋</span>
+          まだ注文履歴がありません
+        </div>`;
+      return;
+    }
+
+    listEl.innerHTML = data.orders.map(o => `
+      <div class="order-card">
+        <div class="order-top">
+          <span class="order-id">${o.orderId}</span>
+          <span class="order-status">${o.status}</span>
+        </div>
+        <div class="order-product">${o.product}</div>
+        <div class="order-detail">${o.detail || ''}</div>
+        ${o.amount > 0 ? `<div class="order-amount">¥${o.amount.toLocaleString()}</div>` : ''}
+        <div style="font-size:11px;color:#aaa;margin-top:6px">${o.date}</div>
+      </div>
+    `).join('');
+
+  } catch(e) {
+    document.getElementById('historyLoading').style.display = 'none';
+    listEl.innerHTML = '<div class="history-empty"><span class="icon">❌</span>読み込みに失敗しました</div>';
+  }
+}
+</script>
+</body>
+</html>

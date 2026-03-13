@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>SNS素材アップロード</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+    }
+
+    /* ── ヘッダー ───────────────────────────── */
+    .header {
+      background: linear-gradient(135deg, #06C755, #00a144);
+      color: white;
+      padding: 16px 20px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: bold;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header small {
+      display: block;
+      font-size: 12px;
+      font-weight: normal;
+      opacity: 0.85;
+      margin-top: 2px;
+    }
+
+    /* ── モード切替タブ ──────────────────────── */
+    .mode-tabs {
+      display: flex;
+      background: white;
+      border-bottom: 2px solid #e0e0e0;
+    }
+    .mode-tab {
+      flex: 1;
+      padding: 14px 8px;
+      border: none;
+      background: none;
+      font-size: 15px;
+      font-weight: 600;
+      color: #888;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+    }
+    .mode-tab.active {
+      color: #06C755;
+      border-bottom-color: #06C755;
+    }
+
+    /* ── メインコンテンツ ─────────────────────── */
+    .content {
+      padding: 16px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* ── アスペクト比プリセット ───────────────── */
+    .preset-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 10px;
+    }
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .preset-btn {
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      background: white;
+      padding: 12px 8px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+      font-size: 13px;
+    }
+    .preset-btn .icon { font-size: 22px; display: block; margin-bottom: 4px; }
+    .preset-btn .name { font-weight: 700; color: #333; }
+    .preset-btn .ratio { font-size: 11px; color: #888; margin-top: 2px; }
+    .preset-btn.selected {
+      border-color: #06C755;
+      background: #f0fff5;
+    }
+
+    /* ── カメラプレビュー ─────────────────────── */
+    .camera-wrap {
+      position: relative;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    #cameraVideo {
+      width: 100%;
+      display: block;
+      max-height: 340px;
+      object-fit: cover;
+    }
+    /* クロップ枠オーバーレイ */
+    #cropOverlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+    }
+    .camera-placeholder {
+      height: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      font-size: 48px;
+    }
+    .camera-placeholder p { font-size: 14px; margin-top: 8px; }
+
+    /* ── 録画インジケーター ─────────────────── */
+    .rec-badge {
+      display: none;
+      position: absolute;
+      top: 10px; right: 10px;
+      background: #e53935;
+      color: white;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 13px;
+      font-weight: bold;
+      animation: blink 1s step-start infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── キャプチャボタン ─────────────────────── */
+    .capture-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .btn-primary {
+      flex: 1;
+      background: #06C755;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 16px 8px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-primary:disabled { background: #b2dfdb; cursor: not-allowed; }
+    .btn-danger {
+      background: #e53935;
+    }
+    .btn-secondary {
+      flex: 1;
+      background: white;
+      color: #333;
+      border: 2px solid #ddd;
+      border-radius: 12px;
+      padding: 16px 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* ── ファイル選択エリア ──────────────────── */
+    .upload-area {
+      border: 2px dashed #b0bec5;
+      border-radius: 12px;
+      background: white;
+      text-align: center;
+      padding: 32px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 16px;
+    }
+    .upload-area:hover { border-color: #06C755; background: #f9fff9; }
+    .upload-area .icon { font-size: 44px; margin-bottom: 10px; }
+    .upload-area p { color: #666; font-size: 14px; }
+    .upload-area small { color: #aaa; font-size: 12px; display: block; margin-top: 6px; }
+    #fileInput { display: none; }
+
+    /* ── プレビューエリア ─────────────────────── */
+    .preview-wrap {
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .preview-wrap.show { display: block; }
+    #previewImg, #previewVideo {
+      width: 100%;
+      display: block;
+      max-height: 360px;
+      object-fit: contain;
+    }
+    .preview-info {
+      background: white;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      display: none;
+    }
+    .preview-info.show { display: block; }
+    .preview-info .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid #f5f5f5;
+    }
+    .preview-info .row:last-child { border-bottom: none; }
+    .preview-info .label { color: #888; }
+    .preview-info .value { font-weight: 600; }
+
+    /* ── プログレスバー ──────────────────────── */
+    .progress-wrap {
+      display: none;
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    .progress-wrap.show { display: block; }
+    .progress-bar-bg {
+      background: #e0e0e0;
+      border-radius: 100px;
+      height: 10px;
+      overflow: hidden;
+      margin: 14px 0 10px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #06C755, #00a144);
+      border-radius: 100px;
+      width: 0%;
+      transition: width 0.3s;
+    }
+    .progress-text { font-size: 14px; color: #555; }
+    .progress-sub  { font-size: 12px; color: #aaa; margin-top: 4px; }
+
+    /* ── 完了カード ──────────────────────────── */
+    .success-wrap {
+      display: none;
+      background: white;
+      border-radius: 12px;
+      padding: 28px 20px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .success-wrap.show { display: block; }
+    .success-icon { font-size: 52px; margin-bottom: 10px; }
+    .success-title { font-size: 18px; font-weight: bold; color: #06C755; margin-bottom: 8px; }
+    .success-sub   { font-size: 13px; color: #666; }
+
+    /* ── エラーカード ─────────────────────────── */
+    .error-wrap {
+      display: none;
+      background: #fff5f5;
+      border: 1px solid #ffcdd2;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      color: #c62828;
+      font-size: 14px;
+    }
+    .error-wrap.show { display: block; }
+
+    /* ── PINダイアログ ─────────────────────────── */
+    .pin-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .pin-card {
+      background: white;
+      border-radius: 16px;
+      padding: 28px 24px;
+      width: 90%;
+      max-width: 320px;
+      text-align: center;
+    }
+    .pin-card h3 { font-size: 18px; margin-bottom: 8px; }
+    .pin-card p  { font-size: 13px; color: #888; margin-bottom: 16px; }
+    .pin-input {
+      width: 100%;
+      border: 2px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 20px;
+      text-align: center;
+      letter-spacing: 4px;
+      margin-bottom: 14px;
+      outline: none;
+    }
+    .pin-input:focus { border-color: #06C755; }
+  </style>
+</head>
+<body>
+
+<!-- ── PINダイアログ ───────────────────────────── -->
+<div class="pin-overlay" id="pinOverlay">
+  <div class="pin-card">
+    <h3>🔐 アクセスコード</h3>
+    <p>アップロードに必要なコードを入力してください</p>
+    <input type="password" class="pin-input" id="pinInput"
+           placeholder="••••" inputmode="numeric" maxlength="8">
+    <button class="btn-primary" style="margin:0" onclick="submitPin()">確認</button>
+    <div class="error-wrap" id="pinError" style="margin-top:10px;border-radius:8px;padding:10px"></div>
+  </div>
+</div>
+
+<!-- ── ヘッダー ────────────────────────────────── -->
+<div class="header">
+  📸 SNS素材アップロード
+  <small>写真・動画をGoogle Driveに自動保存</small>
+</div>
+
+<!-- ── モード切替タブ ──────────────────────────── -->
+<div class="mode-tabs">
+  <button class="mode-tab active" onclick="switchMode('camera')" id="tabCamera">
+    📸 撮影
+  </button>
+  <button class="mode-tab" onclick="switchMode('upload')" id="tabUpload">
+    📁 ファイル選択
+  </button>
+</div>
+
+<div class="content">
+
+  <!-- ── 撮影モード ──────────────────────────────── -->
+  <div id="cameraSection">
+
+    <!-- アスペクト比プリセット -->
+    <div class="preset-label">📐 画角プリセットを選択</div>
+    <div class="preset-grid">
+      <button class="preset-btn selected" onclick="selectPreset(this, 16/9, '16:9')" data-ratio="16/9">
+        <span class="icon">📺</span>
+        <span class="name">YouTube / X</span>
+        <span class="ratio">16:9 横長</span>
+      </button>
+      <button class="preset-btn" onclick="selectPreset(this, 1/1, '1:1')" data-ratio="1/1">
+        <span class="icon">⬛</span>
+        <span class="name">インスタ 正方形</span>
+        <span class="ratio">1:1</span>
+      </button>
+      <button class="preset-btn" onclick="selectPreset(this, 9/16, '9:16')" data-ratio="9/16">
+        <span class="icon">📱</span>
+        <span class="name">リール / TikTok</span>
+        <span class="ratio">9:16 縦長</span>
+      </button>
+      <button class="preset-btn" onclick="selectPreset(this, 4/5, '4:5')" data-ratio="4/5">
+        <span class="icon">🖼️</span>
+        <span class="name">インスタ ポートレート</span>
+        <span class="ratio">4:5 縦型</span>
+      </button>
+    </div>
+
+    <!-- カメラプレビュー -->
+    <div class="camera-wrap" id="cameraWrap">
+      <div class="camera-placeholder" id="cameraPlaceholder">
+        <span>📷</span>
+        <p>下のボタンでカメラを起動</p>
+      </div>
+      <video id="cameraVideo" playsinline autoplay muted style="display:none"></video>
+      <canvas id="cropOverlay"></canvas>
+      <div class="rec-badge" id="recBadge">● REC</div>
+    </div>
+
+    <!-- カメラ操作ボタン -->
+    <div class="capture-row" id="captureRow">
+      <button class="btn-primary" id="btnStartCamera" onclick="startCamera()">
+        📷 カメラ起動
+      </button>
+    </div>
+
+    <div class="capture-row" id="shootRow" style="display:none">
+      <button class="btn-primary" id="btnPhoto" onclick="capturePhoto()">
+        📷 写真を撮る
+      </button>
+      <button class="btn-primary" id="btnVideoStart" onclick="startRecording()">
+        🎬 録画開始
+      </button>
+    </div>
+
+    <div class="capture-row" id="recordRow" style="display:none">
+      <button class="btn-primary btn-danger" onclick="stopRecording()">
+        ⏹ 録画停止
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ── ファイル選択モード ───────────────────────── -->
+  <div id="uploadSection" style="display:none">
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📁</div>
+      <p>タップして写真・動画を選択</p>
+      <small>対応形式: JPG, PNG, MP4, MOV など (最大 50MB)</small>
+    </div>
+    <input type="file" id="fileInput" accept="image/*,video/*" onchange="onFileSelected(event)">
+  </div>
+
+  <!-- ── 共通: プレビュー ─────────────────────────── -->
+  <div class="preview-wrap" id="previewWrap">
+    <img id="previewImg" style="display:none" alt="プレビュー">
+    <video id="previewVideo" style="display:none" controls playsinline></video>
+  </div>
+
+  <div class="preview-info" id="previewInfo">
+    <div class="row">
+      <span class="label">ファイル名</span>
+      <span class="value" id="infoName">—</span>
+    </div>
+    <div class="row">
+      <span class="label">種別</span>
+      <span class="value" id="infoType">—</span>
+    </div>
+    <div class="row">
+      <span class="label">サイズ</span>
+      <span class="value" id="infoSize">—</span>
+    </div>
+  </div>
+
+  <!-- アップロード / やり直しボタン -->
+  <div class="capture-row" id="actionRow" style="display:none">
+    <button class="btn-secondary" onclick="retake()">↩ やり直す</button>
+    <button class="btn-primary" id="btnUpload" onclick="uploadToGAS()">
+      📤 アップロード
+    </button>
+  </div>
+
+  <!-- ── プログレスバー ──────────────────────────── -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-text" id="progressText">アップロード中...</div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-sub" id="progressSub"></div>
+  </div>
+
+  <!-- ── 完了カード ──────────────────────────────── -->
+  <div class="success-wrap" id="successWrap">
+    <div class="success-icon" id="successIcon">✅</div>
+    <div class="success-title">アップロード完了！</div>
+    <div class="success-sub" id="successSub">Google Driveに保存されました</div>
+    <button class="btn-primary" style="margin-top:20px" onclick="resetAll()">
+      📸 続けてアップロード
+    </button>
+  </div>
+
+  <!-- ── エラーカード ────────────────────────────── -->
+  <div class="error-wrap" id="errorWrap">
+    ❌ <span id="errorMsg">エラーが発生しました</span>
+    <br><button class="btn-secondary" style="margin-top:12px;flex:none;padding:10px 20px"
+                onclick="resetAll()">やり直す</button>
+  </div>
+
+</div><!-- /content -->
+
+<script>
+// ============================================================
+// 設定
+// ============================================================
+const GAS_URL  = 'YOUR_GAS_WEBAPP_URL'; // デプロイ後のGAS WebApp URL に変更
+const LIFF_ID  = 'YOUR_LIFF_ID';        // LINE Developers Console で取得
+
+// ============================================================
+// 状態管理
+// ============================================================
+let liffUserId     = 'unknown';
+let userPin        = '';
+let currentPreset  = { ratio: 16/9, label: '16:9' };
+let cameraStream   = null;
+let mediaRecorder  = null;
+let recordedChunks = [];
+let capturedFile   = null; // { blob, mimeType, isVideo }
+let currentMode    = 'camera';
+
+// ============================================================
+// LIFF 初期化
+// ============================================================
+(async function initLiff() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (liff.isLoggedIn()) {
+      const profile = await liff.getProfile();
+      liffUserId = profile.userId;
+    } else {
+      liff.login();
+    }
+  } catch (e) {
+    console.warn('LIFF init error (non-LIFF env):', e);
+    // ブラウザ直接アクセス時は続行
+  }
+})();
+
+// ============================================================
+// PINダイアログ
+// ============================================================
+function submitPin() {
+  const pin = document.getElementById('pinInput').value.trim();
+  if (!pin) {
+    showPinError('コードを入力してください');
+    return;
+  }
+  userPin = pin;
+  document.getElementById('pinOverlay').style.display = 'none';
+}
+
+function showPinError(msg) {
+  const el = document.getElementById('pinError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+// ============================================================
+// モード切替
+// ============================================================
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('tabCamera').classList.toggle('active', mode === 'camera');
+  document.getElementById('tabUpload').classList.toggle('active', mode === 'upload');
+  document.getElementById('cameraSection').style.display = mode === 'camera' ? '' : 'none';
+  document.getElementById('uploadSection').style.display = mode === 'upload' ? '' : 'none';
+  resetPreview();
+  if (mode !== 'camera') stopCamera();
+}
+
+// ============================================================
+// アスペクト比プリセット選択
+// ============================================================
+function selectPreset(btn, ratio, label) {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  currentPreset = { ratio, label };
+  if (cameraStream) applyPreset();
+}
+
+// ============================================================
+// カメラ起動
+// ============================================================
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: true
+    });
+    const video = document.getElementById('cameraVideo');
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+    document.getElementById('cameraPlaceholder').style.display = 'none';
+    document.getElementById('captureRow').style.display   = 'none';
+    document.getElementById('shootRow').style.display     = 'flex';
+  } catch (e) {
+    showError('カメラへのアクセスに失敗しました。\nブラウザの設定でカメラを許可してください。');
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+  const video = document.getElementById('cameraVideo');
+  video.srcObject = null;
+  video.style.display = 'none';
+  document.getElementById('cameraPlaceholder').style.display = 'flex';
+  document.getElementById('captureRow').style.display   = 'flex';
+  document.getElementById('shootRow').style.display     = 'none';
+}
+
+function applyPreset() {
+  const track = cameraStream && cameraStream.getVideoTracks()[0];
+  if (track) {
+    track.applyConstraints({ aspectRatio: { ideal: currentPreset.ratio } }).catch(() => {});
+  }
+}
+
+// ============================================================
+// 写真キャプチャ（Canvas経由でアスペクト比クロップ）
+// ============================================================
+function capturePhoto() {
+  const video = document.getElementById('cameraVideo');
+  const { ratio } = currentPreset;
+
+  // ソース動画サイズ
+  const vw = video.videoWidth  || 1280;
+  const vh = video.videoHeight || 720;
+
+  // クロップ計算（中央から切り出し）
+  let sw = vw, sh = vh;
+  if (vw / vh > ratio) {
+    sw = Math.round(vh * ratio);
+  } else {
+    sh = Math.round(vw / ratio);
+  }
+  const sx = Math.round((vw - sw) / 2);
+  const sy = Math.round((vh - sh) / 2);
+
+  // 出力サイズ（最大 1920px）
+  const scale  = Math.min(1, 1920 / Math.max(sw, sh));
+  const outW   = Math.round(sw * scale);
+  const outH   = Math.round(sh * scale);
+
+  const canvas  = document.createElement('canvas');
+  canvas.width  = outW;
+  canvas.height = outH;
+  canvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, outW, outH);
+
+  canvas.toBlob(blob => {
+    capturedFile = { blob, mimeType: 'image/jpeg', isVideo: false, name: 'photo.jpg' };
+    showPreview(blob, false);
+    stopCamera();
+  }, 'image/jpeg', 0.92);
+}
+
+// ============================================================
+// 動画録画
+// ============================================================
+function startRecording() {
+  if (!cameraStream) return;
+  recordedChunks = [];
+
+  const mimeType = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm';
+  mediaRecorder  = new MediaRecorder(cameraStream, { mimeType });
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+  };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: mimeType });
+    const ext  = mimeType === 'video/mp4' ? 'mp4' : 'webm';
+    capturedFile = { blob, mimeType, isVideo: true, name: 'video.' + ext };
+    showPreview(blob, true);
+    stopCamera();
+    document.getElementById('recordRow').style.display = 'none';
+    document.getElementById('shootRow').style.display  = 'none';
+  };
+
+  mediaRecorder.start(1000);
+  document.getElementById('shootRow').style.display  = 'none';
+  document.getElementById('recordRow').style.display = 'flex';
+  document.getElementById('recBadge').style.display  = 'block';
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  document.getElementById('recBadge').style.display = 'none';
+}
+
+// ============================================================
+// ファイル選択（アップロードモード）
+// ============================================================
+function onFileSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  const MAX_MB = 50;
+  if (file.size > MAX_MB * 1024 * 1024) {
+    showError(MAX_MB + 'MB を超えるファイルはアップロードできません。\n動画は短くトリミングしてからお試しください。');
+    return;
+  }
+
+  const isVideo = file.type.startsWith('video');
+  capturedFile = { blob: file, mimeType: file.type, isVideo, name: file.name };
+  showPreview(file, isVideo);
+}
+
+// ============================================================
+// プレビュー表示
+// ============================================================
+function showPreview(fileOrBlob, isVideo) {
+  const url = URL.createObjectURL(fileOrBlob);
+
+  const img   = document.getElementById('previewImg');
+  const video = document.getElementById('previewVideo');
+
+  img.style.display   = 'none';
+  video.style.display = 'none';
+
+  if (isVideo) {
+    video.src = url;
+    video.style.display = 'block';
+  } else {
+    img.src = url;
+    img.style.display = 'block';
+  }
+
+  document.getElementById('previewWrap').classList.add('show');
+  document.getElementById('previewInfo').classList.add('show');
+
+  const bytes = fileOrBlob.size;
+  const mb    = (bytes / (1024 * 1024)).toFixed(1);
+  document.getElementById('infoName').textContent = capturedFile.name;
+  document.getElementById('infoType').textContent = isVideo ? '🎬 動画' : '📸 写真';
+  document.getElementById('infoSize').textContent = mb + ' MB';
+
+  document.getElementById('actionRow').style.display = 'flex';
+  document.getElementById('shootRow').style.display  = 'none';
+}
+
+// ============================================================
+// GASへアップロード
+// ============================================================
+async function uploadToGAS() {
+  if (!capturedFile) return;
+
+  if (!userPin) {
+    document.getElementById('pinOverlay').style.display = 'flex';
+    return;
+  }
+
+  // UI 切替
+  document.getElementById('actionRow').style.display = 'none';
+  document.getElementById('previewInfo').classList.remove('show');
+  showProgress(10, 'ファイルを読み込み中...');
+
+  try {
+    // Blob → Base64
+    const base64 = await blobToBase64(capturedFile.blob);
+    showProgress(30, 'サーバーに送信中...');
+
+    const payload = {
+      action:   'uploadSNS',
+      pin:      userPin,
+      userId:   liffUserId,
+      fileName: capturedFile.name,
+      fileData: base64,
+      mimeType: capturedFile.mimeType
+    };
+
+    showProgress(50, 'Google Driveに保存中...');
+
+    const resp = await fetch(GAS_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload)
+    });
+
+    showProgress(90, '保存完了を確認中...');
+
+    const result = await resp.json();
+    if (result.success) {
+      showProgress(100, '完了！');
+      setTimeout(() => showSuccess(result), 400);
+    } else {
+      if (result.error && result.error.includes('アクセスコード')) {
+        userPin = '';
+        showError('アクセスコードが正しくありません。もう一度入力してください。');
+        document.getElementById('pinOverlay').style.display = 'flex';
+      } else {
+        showError(result.error || 'アップロードに失敗しました');
+      }
+    }
+  } catch (e) {
+    showError('通信エラーが発生しました。\n電波状況を確認してもう一度お試しください。\n' + e.message);
+  }
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result); // data:mime;base64,... 形式
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// ============================================================
+// UI ヘルパー
+// ============================================================
+function showProgress(pct, text, sub) {
+  const wrap = document.getElementById('progressWrap');
+  wrap.classList.add('show');
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent = text || 'アップロード中...';
+  document.getElementById('progressSub').textContent  = sub  || '';
+  document.getElementById('successWrap').classList.remove('show');
+  document.getElementById('errorWrap').classList.remove('show');
+}
+
+function showSuccess(result) {
+  document.getElementById('progressWrap').classList.remove('show');
+  const icon = result.isVideo ? '🎬' : '📸';
+  document.getElementById('successIcon').textContent = icon + ' ✅';
+  document.getElementById('successSub').textContent  =
+    'ファイル: ' + result.fileName + '\n保存先: ' + (result.folderPath || 'Google Drive');
+  document.getElementById('successWrap').classList.add('show');
+}
+
+function showError(msg) {
+  document.getElementById('progressWrap').classList.remove('show');
+  document.getElementById('errorMsg').textContent = msg;
+  document.getElementById('errorWrap').classList.add('show');
+  document.getElementById('actionRow').style.display = 'flex';
+}
+
+function resetPreview() {
+  capturedFile = null;
+  document.getElementById('previewWrap').classList.remove('show');
+  document.getElementById('previewInfo').classList.remove('show');
+  document.getElementById('actionRow').style.display = 'none';
+  document.getElementById('progressWrap').classList.remove('show');
+  document.getElementById('successWrap').classList.remove('show');
+  document.getElementById('errorWrap').classList.remove('show');
+  document.getElementById('previewImg').src   = '';
+  document.getElementById('previewVideo').src = '';
+}
+
+function retake() {
+  resetPreview();
+  if (currentMode === 'camera') {
+    document.getElementById('shootRow').style.display = cameraStream ? 'flex' : 'none';
+    document.getElementById('captureRow').style.display = cameraStream ? 'none' : 'flex';
+  }
+}
+
+function resetAll() {
+  retake();
+  stopCamera();
+  document.getElementById('fileInput').value = '';
+}
+</script>
+</body>
+</html>
