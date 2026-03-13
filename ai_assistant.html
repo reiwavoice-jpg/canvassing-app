@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>AIアシスタント | 片岡議員</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root {
+    --primary:   #1a56db;
+    --primary-dk:#1342b0;
+    --ai-bg:     #f0f4ff;
+    --ai-border: #c7d6fb;
+    --user-bg:   #1a56db;
+    --surface:   #ffffff;
+    --bg:        #f5f7fb;
+    --text:      #1a1a2e;
+    --text-sub:  #6b7280;
+    --radius:    14px;
+    --shadow:    0 2px 12px rgba(0,0,0,0.09);
+    --mode-draft:   #7c3aed;
+    --mode-sns:     #0891b2;
+    --mode-policy:  #059669;
+    --mode-free:    #d97706;
+    --mode-rag:     #dc2626;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── ヘッダー ─────────────────────── */
+  .header {
+    background: var(--primary);
+    color: #fff;
+    padding: 14px 16px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(26,86,219,0.3);
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .header-icon { font-size: 22px; }
+  .header-title { font-size: 16px; font-weight: 700; }
+  .header-sub   { font-size: 11px; opacity: 0.8; }
+  .history-btn {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .history-btn:active { background: rgba(255,255,255,0.3); }
+
+  /* ── モード選択タブ ─────────────────── */
+  .mode-bar {
+    background: var(--surface);
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 12px 8px;
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .mode-bar::-webkit-scrollbar { display: none; }
+  .mode-tabs {
+    display: flex;
+    gap: 8px;
+    min-width: max-content;
+  }
+  .mode-tab {
+    border: 2px solid #e5e7eb;
+    background: #fff;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-sub);
+    transition: all 0.2s;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .mode-tab.active-draft  { background: #f3e8ff; border-color: var(--mode-draft);  color: var(--mode-draft);  }
+  .mode-tab.active-sns    { background: #e0f2fe; border-color: var(--mode-sns);    color: var(--mode-sns);    }
+  .mode-tab.active-policy { background: #d1fae5; border-color: var(--mode-policy); color: var(--mode-policy); }
+  .mode-tab.active-free   { background: #fef3c7; border-color: var(--mode-free);   color: var(--mode-free);   }
+  .mode-tab.active-rag    { background: #fee2e2; border-color: var(--mode-rag);    color: var(--mode-rag);    }
+  .mode-hint {
+    font-size: 11px;
+    color: var(--text-sub);
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+
+  /* ── チャットエリア ─────────────────── */
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .welcome-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+  .welcome-card .w-icon { font-size: 36px; margin-bottom: 8px; }
+  .welcome-card h2 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .welcome-card p  { font-size: 13px; color: var(--text-sub); line-height: 1.6; }
+
+  /* メッセージ */
+  .msg-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .msg-row.user { align-items: flex-end; }
+  .msg-row.ai   { align-items: flex-start; }
+
+  .msg-label {
+    font-size: 11px;
+    color: var(--text-sub);
+    padding: 0 4px;
+  }
+
+  .msg-bubble {
+    max-width: 88%;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    font-size: 14px;
+    line-height: 1.65;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .msg-bubble.user {
+    background: var(--user-bg);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .msg-bubble.ai {
+    background: var(--ai-bg);
+    border: 1px solid var(--ai-border);
+    color: var(--text);
+    border-bottom-left-radius: 4px;
+  }
+  .msg-bubble.ai.draft-mode      { border-color: #c4b5fd; background: #f5f3ff; }
+  .msg-bubble.ai.sns-mode        { border-color: #7dd3fc; background: #f0f9ff; }
+  .msg-bubble.ai.policy-mode     { border-color: #6ee7b7; background: #f0fdf4; }
+  .msg-bubble.ai.free-mode       { border-color: #fcd34d; background: #fffbeb; }
+  .msg-bubble.ai.parliament_rag-mode { border-color: #fca5a5; background: #fff5f5; }
+
+  /* 出典カード */
+  .source-card {
+    max-width: 88%;
+    background: #fff;
+    border: 1px solid #fca5a5;
+    border-left: 3px solid var(--mode-rag);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .source-card-title { font-weight: 700; color: var(--mode-rag); margin-bottom: 4px; }
+  .source-item { color: var(--text-sub); line-height: 1.6; }
+
+  /* Google Docs リンク */
+  .docs-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #1a73e8;
+    color: #fff;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    margin-top: 4px;
+  }
+  .docs-link:active { opacity: 0.85; }
+
+  .msg-actions {
+    display: flex;
+    gap: 6px;
+    padding: 2px 4px;
+  }
+  .copy-btn, .retry-btn {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: var(--text-sub);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .copy-btn:active, .retry-btn:active { background: #f3f4f6; }
+  .copy-btn.copied { border-color: #10b981; color: #10b981; }
+
+  /* タイピングインジケータ */
+  .typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--ai-bg);
+    border: 1px solid var(--ai-border);
+    border-radius: var(--radius);
+    border-bottom-left-radius: 4px;
+    width: fit-content;
+    max-width: 88%;
+  }
+  .typing-dots { display: flex; gap: 4px; }
+  .typing-dots span {
+    width: 8px; height: 8px;
+    background: var(--primary);
+    border-radius: 50%;
+    animation: bounce 1.2s infinite;
+    opacity: 0.6;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: translateY(0); }
+    40%           { transform: translateY(-6px); opacity: 1; }
+  }
+  .typing-label { font-size: 12px; color: var(--text-sub); }
+
+  /* ── 入力エリア ─────────────────────── */
+  .input-area {
+    background: var(--surface);
+    border-top: 1px solid #e5e7eb;
+    padding: 10px 12px;
+    flex-shrink: 0;
+  }
+  .input-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .input-wrap {
+    flex: 1;
+    background: #f9fafb;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 2px 4px;
+    transition: border-color 0.2s;
+  }
+  .input-wrap:focus-within { border-color: var(--primary); background: #fff; }
+  textarea {
+    width: 100%;
+    border: none;
+    background: transparent;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+    padding: 8px 10px;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  textarea::placeholder { color: #9ca3af; }
+  .send-btn {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    background: var(--primary);
+    border: none;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+  .send-btn:active    { background: var(--primary-dk); }
+  .send-btn:disabled  { background: #d1d5db; cursor: not-allowed; }
+  .char-count {
+    font-size: 11px;
+    color: var(--text-sub);
+    text-align: right;
+    padding: 2px 4px 4px;
+  }
+  .char-count.over { color: #ef4444; }
+
+  /* ── 履歴パネル ─────────────────────── */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 100;
+    display: none;
+    animation: fadeIn 0.2s;
+  }
+  .overlay.open { display: block; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .history-panel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-radius: 18px 18px 0 0;
+    z-index: 101;
+    max-height: 75dvh;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .history-panel.open { transform: translateY(0); }
+
+  .panel-handle {
+    width: 40px; height: 4px;
+    background: #d1d5db;
+    border-radius: 2px;
+    margin: 10px auto 0;
+  }
+  .panel-header {
+    padding: 14px 16px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .panel-title  { font-size: 15px; font-weight: 700; }
+  .panel-close  { font-size: 20px; cursor: pointer; color: var(--text-sub); background: none; border: none; }
+
+  .history-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .history-empty {
+    text-align: center;
+    color: var(--text-sub);
+    font-size: 13px;
+    padding: 24px 0;
+  }
+
+  .history-item {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: var(--radius);
+    padding: 12px;
+    cursor: pointer;
+  }
+  .history-item:active { background: #f3f4f6; }
+  .hi-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .hi-mode {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .hi-mode.draft          { background: #f3e8ff; color: var(--mode-draft);  }
+  .hi-mode.sns            { background: #e0f2fe; color: var(--mode-sns);    }
+  .hi-mode.policy         { background: #d1fae5; color: var(--mode-policy); }
+  .hi-mode.free           { background: #fef3c7; color: var(--mode-free);   }
+  .hi-mode.parliament_rag { background: #fee2e2; color: var(--mode-rag);    }
+
+  .hi-date  { font-size: 11px; color: var(--text-sub); }
+  .hi-input { font-size: 13px; color: var(--text);     margin-bottom: 4px;
+              display: -webkit-box; -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical; overflow: hidden; }
+  .hi-output{ font-size: 12px; color: var(--text-sub);
+              display: -webkit-box; -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* ── トースト通知 ─────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: rgba(17,24,39,0.88);
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    z-index: 200;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ── アップロードパネル ───────────────── */
+  .upload-panel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-radius: 18px 18px 0 0;
+    z-index: 101;
+    max-height: 80dvh;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .upload-panel.open { transform: translateY(0); }
+
+  .up-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 16px;
+  }
+
+  .up-desc {
+    font-size: 13px;
+    color: var(--text-sub);
+    line-height: 1.7;
+    margin-bottom: 14px;
+    background: #f0f9ff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    border-left: 3px solid #3b82f6;
+  }
+
+  .up-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-sub);
+    margin-bottom: 6px;
+    margin-top: 14px;
+    display: block;
+  }
+
+  .up-input {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1.5px solid #e5e7eb;
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #f9fafb;
+    color: var(--text);
+    box-sizing: border-box;
+  }
+  .up-input:focus { outline: none; border-color: var(--primary); background: #fff; }
+
+  .up-drop {
+    border: 2px dashed #d1d5db;
+    border-radius: 12px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    background: #f9fafb;
+    transition: all 0.2s;
+    position: relative;
+    margin-top: 6px;
+  }
+  .up-drop:hover, .up-drop.dragover { border-color: #10b981; background: #f0fdf4; }
+  .up-drop input[type="file"] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .up-drop-icon { font-size: 2.2rem; }
+  .up-drop-text { font-size: 14px; font-weight: 700; color: var(--text); margin-top: 6px; }
+  .up-drop-hint { font-size: 12px; color: var(--text-sub); margin-top: 3px; }
+
+  .up-file-info {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: #f0fdf4;
+    border: 1.5px solid #86efac;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .up-file-info.show { display: flex; }
+  .up-file-name { font-weight: 700; color: #166534; flex: 1; word-break: break-all; }
+  .up-file-size { color: var(--text-sub); font-size: 11px; white-space: nowrap; }
+
+  .up-progress { display: none; margin-top: 10px; }
+  .up-progress.show { display: block; }
+  .up-progress-bar {
+    width: 100%; height: 7px;
+    background: #e5e7eb; border-radius: 4px; overflow: hidden;
+  }
+  .up-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    border-radius: 4px;
+    transition: width 0.3s;
+  }
+  .up-progress-text { font-size: 12px; color: var(--text-sub); text-align: center; margin-top: 4px; }
+
+  .up-msg {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+    line-height: 1.5;
+  }
+  .up-msg.show { display: block; }
+  .up-msg.success { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
+  .up-msg.error   { background: #fff5f5; color: #991b1b; border: 1px solid #fca5a5; }
+
+  .up-btn {
+    width: 100%;
+    margin-top: 14px;
+    padding: 13px;
+    background: linear-gradient(135deg, #059669, #10b981);
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+  .up-btn:active  { background: linear-gradient(135deg, #047857, #059669); }
+  .up-btn:disabled { background: #d1d5db; cursor: not-allowed; }
+
+  .up-spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2.5px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .up-note {
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-top: 14px;
+    line-height: 1.8;
+    border-top: 1px solid #f3f4f6;
+    padding-top: 12px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ヘッダー -->
+<div class="header">
+  <div class="header-left">
+    <span class="header-icon">🤖</span>
+    <div>
+      <div class="header-title">AIアシスタント</div>
+      <div class="header-sub">片岡議員 専用</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;">
+    <button class="history-btn" onclick="openUpload()">📎 資料</button>
+    <button class="history-btn" onclick="openHistory()">📋 履歴</button>
+  </div>
+</div>
+
+<!-- モード選択 -->
+<div class="mode-bar">
+  <div class="mode-tabs">
+    <button class="mode-tab active-rag" data-mode="parliament_rag" onclick="selectMode(this, 'parliament_rag')">
+      🏛️ 議会資料
+    </button>
+    <button class="mode-tab" data-mode="draft_answer" onclick="selectMode(this, 'draft_answer')">
+      📝 答弁書
+    </button>
+    <button class="mode-tab" data-mode="sns_post" onclick="selectMode(this, 'sns_post')">
+      📱 SNS投稿文
+    </button>
+    <button class="mode-tab" data-mode="policy_summary" onclick="selectMode(this, 'policy_summary')">
+      📖 政策要約
+    </button>
+    <button class="mode-tab" data-mode="free_chat" onclick="selectMode(this, 'free_chat')">
+      💬 自由会話
+    </button>
+  </div>
+  <div class="mode-hint" id="modeHint">🏛️ 議会資料を検索してAIが回答・答弁書を自動生成＆Google Docs保存</div>
+</div>
+
+<!-- チャットエリア -->
+<div class="chat-area" id="chatArea">
+  <div class="welcome-card">
+    <div class="w-icon">✨</div>
+    <h2>こんにちは、片岡議員！</h2>
+    <p>上のモードを選んで、用件を入力してください。<br>答弁書・SNS投稿文・政策解説など、AIがサポートします。</p>
+  </div>
+</div>
+
+<!-- 入力エリア -->
+<div class="input-area">
+  <div class="input-row">
+    <div class="input-wrap">
+      <textarea id="msgInput"
+        placeholder="ここに入力（例：子育て支援予算について答弁書を作って）"
+        rows="1"
+        maxlength="1000"
+        oninput="autoResize(this); updateCharCount(this);"
+        onkeydown="onKeyDown(event)"></textarea>
+      <div class="char-count" id="charCount">0 / 1000</div>
+    </div>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="送信">
+      ➤
+    </button>
+  </div>
+</div>
+
+<!-- 履歴オーバーレイ -->
+<div class="overlay" id="overlay" onclick="closeHistory()"></div>
+<div class="history-panel" id="historyPanel">
+  <div class="panel-handle"></div>
+  <div class="panel-header">
+    <span class="panel-title">📋 過去の生成履歴</span>
+    <button class="panel-close" onclick="closeHistory()">✕</button>
+  </div>
+  <div class="history-list" id="historyList">
+    <div class="history-empty">読み込み中...</div>
+  </div>
+</div>
+
+<!-- アップロードパネル -->
+<div class="overlay" id="uploadOverlay" onclick="closeUpload()"></div>
+<div class="upload-panel" id="uploadPanel">
+  <div class="panel-handle"></div>
+  <div class="panel-header">
+    <span class="panel-title">📎 議会資料をアップロード</span>
+    <button class="panel-close" onclick="closeUpload()">✕</button>
+  </div>
+  <div class="up-body">
+    <div class="up-desc">
+      PDFファイルを選択してアップロードしてください。<br>
+      アップロードした資料はAI答弁書作成に自動的に反映されます。
+    </div>
+
+    <label class="up-label">🔑 アクセスコード</label>
+    <input type="password" class="up-input" id="upPin" placeholder="担当者から受け取ったコードを入力" />
+
+    <label class="up-label">📄 PDFファイルを選択</label>
+    <div class="up-drop" id="upDrop">
+      <input type="file" id="upFileInput" accept=".pdf,application/pdf" onchange="onUpFileSelected(event)" />
+      <div class="up-drop-icon">📂</div>
+      <div class="up-drop-text">タップしてPDFを選ぶ</div>
+      <div class="up-drop-hint">またはここにドラッグ＆ドロップ</div>
+    </div>
+
+    <div class="up-file-info" id="upFileInfo">
+      <span>📄</span>
+      <span class="up-file-name" id="upFileName"></span>
+      <span class="up-file-size" id="upFileSize"></span>
+    </div>
+
+    <div class="up-progress" id="upProgress">
+      <div class="up-progress-bar">
+        <div class="up-progress-fill" id="upProgressFill" style="width:0%"></div>
+      </div>
+      <div class="up-progress-text" id="upProgressText"></div>
+    </div>
+
+    <div class="up-msg" id="upMsg"></div>
+
+    <button class="up-btn" id="upBtn" onclick="doUpload()" disabled>
+      ⬆️ アップロードする
+    </button>
+
+    <div class="up-note">
+      ・PDF形式のみ対応（最大50MB）<br>
+      ・AIへの反映には数時間かかる場合があります<br>
+      ・機密資料は安全なサーバーに保存されます
+    </div>
+  </div>
+</div>
+
+<!-- トースト -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// 設定
+// ============================================================
+var LIFF_ID = '2009413587-0Plg0ecV';  // canvassing.html と同じ LIFF ID
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbxjjLVWPU06BgmwtYrnyjC8LIuV54mzG0YMa_SkWuL5yN8y6m9GEbM_C0cRtX7UlWOM/exec';
+
+var userId      = '';
+var currentMode = 'parliament_rag';
+var isLoading   = false;
+
+var MODE_META = {
+  parliament_rag: { label: '🏛️ 議会資料', cls: 'parliament_rag', hint: '🏛️ 議会資料を検索してAIが回答・答弁書を自動生成＆Google Docs保存', activeCls: 'active-rag'    },
+  draft_answer:   { label: '📝 答弁書',   cls: 'draft',          hint: '📝 答弁書・議会質問・討論文の草稿を作成します',                  activeCls: 'active-draft'  },
+  sns_post:       { label: '📱 SNS',       cls: 'sns',            hint: '📱 X(Twitter)・Facebook 用の投稿文を作成します',               activeCls: 'active-sns'    },
+  policy_summary: { label: '📖 政策要約',  cls: 'policy',         hint: '📖 政策・条例・法律をわかりやすく解説します',                    activeCls: 'active-policy' },
+  free_chat:      { label: '💬 自由会話',  cls: 'free',           hint: '💬 なんでもご相談ください',                                      activeCls: 'active-free'   }
+};
+
+// ============================================================
+// LIFF 初期化
+// ============================================================
+window.addEventListener('load', function() {
+  liff.init({ liffId: LIFF_ID })
+    .then(function() {
+      if (!liff.isLoggedIn()) {
+        liff.login({ redirectUri: location.href });
+        return;
+      }
+      return liff.getProfile();
+    })
+    .then(function(profile) {
+      if (profile) userId = profile.userId;
+    })
+    .catch(function(err) {
+      console.warn('LIFF init failed, using URL param:', err);
+      var p = new URLSearchParams(location.search);
+      userId = p.get('userId') || '';
+    });
+});
+
+// ============================================================
+// GAS API 呼び出し
+// ============================================================
+function gasAPI(params) {
+  var qs = Object.keys(params).map(function(k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+  }).join('&');
+  return fetch(GAS_URL + '?' + qs).then(function(r) { return r.json(); });
+}
+
+// ============================================================
+// モード選択
+// ============================================================
+function selectMode(btn, mode) {
+  // 全タブをリセット
+  document.querySelectorAll('.mode-tab').forEach(function(t) {
+    t.className = 'mode-tab';
+  });
+  // 選択したタブをアクティブに
+  btn.className = 'mode-tab ' + MODE_META[mode].activeCls;
+  currentMode = mode;
+  document.getElementById('modeHint').textContent = MODE_META[mode].hint;
+
+  // 入力プレースホルダーを変更
+  var hints = {
+    parliament_rag: '例：令和6年度の子育て支援予算について答弁書を作って',
+    draft_answer:   '例：少子化対策予算について一般質問の答弁書を作って',
+    sns_post:       '例：今日の委員会活動についてツイートを作って',
+    policy_summary: '例：座間市の子ども医療費助成制度をわかりやすく説明して',
+    free_chat:      '何でも聞いてください'
+  };
+  document.getElementById('msgInput').placeholder = hints[mode];
+}
+
+// ============================================================
+// メッセージ送信
+// ============================================================
+function sendMessage() {
+  var text = document.getElementById('msgInput').value.trim();
+  if (!text || isLoading) return;
+
+  // ユーザーメッセージ表示
+  appendUserMessage(text);
+  document.getElementById('msgInput').value = '';
+  autoResize(document.getElementById('msgInput'));
+  updateCharCount(document.getElementById('msgInput'));
+
+  // タイピングインジケータ表示
+  var typingId = showTyping();
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+
+  // GAS API 呼び出し（議会資料モードは askRAG、それ以外は askAI）
+  var apiParams = (currentMode === 'parliament_rag')
+    ? { action: 'askRAG', userId: userId, text: text }
+    : { action: 'askAI',  userId: userId, mode: currentMode, text: text };
+
+  gasAPI(apiParams)
+  .then(function(data) {
+    removeTyping(typingId);
+    isLoading = false;
+    document.getElementById('sendBtn').disabled = false;
+    if (data.success) {
+      appendAIMessage(data.response, data.mode || currentMode, text, data.sources, data.docUrl);
+    } else {
+      appendAIMessage('⚠️ エラーが発生しました：' + (data.error || '不明なエラー'), currentMode, text, null, null);
+    }
+  })
+  .catch(function(err) {
+    removeTyping(typingId);
+    isLoading = false;
+    document.getElementById('sendBtn').disabled = false;
+    appendAIMessage('⚠️ 通信エラーが発生しました。しばらくしてからお試しください。', currentMode, text, null, null);
+    console.error(err);
+  });
+}
+
+// ============================================================
+// ウェルカムカードを消してメッセージ追加
+// ============================================================
+function clearWelcome() {
+  var w = document.querySelector('.welcome-card');
+  if (w) w.remove();
+}
+
+function appendUserMessage(text) {
+  clearWelcome();
+  var row = document.createElement('div');
+  row.className = 'msg-row user';
+  row.innerHTML =
+    '<div class="msg-label">片岡議員</div>' +
+    '<div class="msg-bubble user">' + escHtml(text) + '</div>';
+  document.getElementById('chatArea').appendChild(row);
+  scrollBottom();
+}
+
+function appendAIMessage(text, mode, userText, sources, docUrl) {
+  var meta  = MODE_META[mode] || MODE_META.free_chat;
+  var msgId = 'msg_' + Date.now();
+  var row   = document.createElement('div');
+  row.className = 'msg-row ai';
+
+  // 出典カード（議会資料モードのみ）
+  var sourceHtml = '';
+  if (sources && sources.length > 0) {
+    var items = sources.map(function(s) {
+      return '<div class="source-item">📄 [資料' + s.index + '] ' + escHtml(s.title) + '</div>';
+    }).join('');
+    sourceHtml =
+      '<div class="source-card">' +
+        '<div class="source-card-title">📎 参照した議会資料</div>' +
+        items +
+      '</div>';
+  }
+
+  // Google Docs リンク
+  var docsHtml = '';
+  if (docUrl) {
+    docsHtml =
+      '<a class="docs-link" href="' + escHtml(docUrl) + '" target="_blank">' +
+        '📄 Google Docs で開く' +
+      '</a>';
+  }
+
+  row.innerHTML =
+    '<div class="msg-label">🤖 AI（' + meta.label + '）</div>' +
+    '<div class="msg-bubble ai ' + meta.cls + '-mode" id="' + msgId + '">' + escHtml(text) + '</div>' +
+    sourceHtml +
+    '<div class="msg-actions">' +
+      '<button class="copy-btn" onclick="copyText(\'' + msgId + '\', this)">📋 コピー</button>' +
+      '<button class="retry-btn" onclick="retryMessage(' + JSON.stringify(userText) + ')">🔄 再生成</button>' +
+    '</div>' +
+    docsHtml;
+
+  document.getElementById('chatArea').appendChild(row);
+  scrollBottom();
+}
+
+function showTyping() {
+  var id  = 'typing_' + Date.now();
+  var row = document.createElement('div');
+  row.className = 'msg-row ai';
+  row.id = id;
+  row.innerHTML =
+    '<div class="msg-label">🤖 AI が考えています...</div>' +
+    '<div class="typing-indicator">' +
+      '<div class="typing-dots"><span></span><span></span><span></span></div>' +
+      '<span class="typing-label">生成中</span>' +
+    '</div>';
+  document.getElementById('chatArea').appendChild(row);
+  scrollBottom();
+  return id;
+}
+
+function removeTyping(id) {
+  var el = document.getElementById(id);
+  if (el) el.remove();
+}
+
+// ============================================================
+// コピー
+// ============================================================
+function copyText(msgId, btn) {
+  var el   = document.getElementById(msgId);
+  var text = el ? el.innerText : '';
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = '✅ コピー済み';
+    btn.classList.add('copied');
+    setTimeout(function() {
+      btn.textContent = '📋 コピー';
+      btn.classList.remove('copied');
+    }, 2000);
+    showToast('クリップボードにコピーしました');
+  }).catch(function() {
+    // fallback
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('コピーしました');
+  });
+}
+
+// ============================================================
+// 再生成
+// ============================================================
+function retryMessage(userText) {
+  document.getElementById('msgInput').value = userText;
+  autoResize(document.getElementById('msgInput'));
+  sendMessage();
+}
+
+// ============================================================
+// 履歴パネル
+// ============================================================
+function openHistory() {
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('historyPanel').classList.add('open');
+  loadHistory();
+}
+
+function closeHistory() {
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('historyPanel').classList.remove('open');
+}
+
+function loadHistory() {
+  var list = document.getElementById('historyList');
+  list.innerHTML = '<div class="history-empty">読み込み中...</div>';
+
+  gasAPI({ action: 'getAIHistory', userId: userId })
+    .then(function(data) {
+      if (!data.success || !data.history || data.history.length === 0) {
+        list.innerHTML = '<div class="history-empty">📭 履歴はまだありません</div>';
+        return;
+      }
+
+      list.innerHTML = '';
+      data.history.forEach(function(item) {
+        var meta = MODE_META[item.mode] || MODE_META.free_chat;
+        var div  = document.createElement('div');
+        div.className = 'history-item';
+        div.innerHTML =
+          '<div class="hi-top">' +
+            '<span class="hi-mode ' + meta.cls + '">' + meta.label + '</span>' +
+            '<span class="hi-date">' + (item.date || '').substring(0, 16) + '</span>' +
+          '</div>' +
+          '<div class="hi-input">' + escHtml(item.input) + '</div>' +
+          '<div class="hi-output">' + escHtml(item.output) + '</div>';
+
+        // タップで入力欄にセット
+        div.addEventListener('click', function() {
+          var modeTab = document.querySelector('[data-mode="' + item.mode + '"]');
+          if (modeTab) selectMode(modeTab, item.mode);
+          document.getElementById('msgInput').value = item.input;
+          autoResize(document.getElementById('msgInput'));
+          updateCharCount(document.getElementById('msgInput'));
+          closeHistory();
+        });
+        list.appendChild(div);
+      });
+    })
+    .catch(function() {
+      list.innerHTML = '<div class="history-empty">⚠️ 履歴の読み込みに失敗しました</div>';
+    });
+}
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function scrollBottom() {
+  var ca = document.getElementById('chatArea');
+  setTimeout(function() { ca.scrollTop = ca.scrollHeight; }, 50);
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function updateCharCount(el) {
+  var cnt = document.getElementById('charCount');
+  var len = el.value.length;
+  cnt.textContent = len + ' / 1000';
+  cnt.className   = 'char-count' + (len > 900 ? ' over' : '');
+}
+
+function onKeyDown(e) {
+  // Shift+Enter で改行、Enter だけで送信（PCのみ）
+  if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && window.innerWidth > 768) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 2000);
+}
+
+// ============================================================
+// アップロードパネル
+// ============================================================
+var upSelectedFile = null;
+
+function openUpload() {
+  document.getElementById('uploadOverlay').classList.add('open');
+  document.getElementById('uploadPanel').classList.add('open');
+}
+function closeUpload() {
+  document.getElementById('uploadOverlay').classList.remove('open');
+  document.getElementById('uploadPanel').classList.remove('open');
+}
+
+function onUpFileSelected(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.includes('pdf')) {
+    showUpMsg('PDFファイルのみアップロード可能です', 'error');
+    return;
+  }
+  if (file.size > 50 * 1024 * 1024) {
+    showUpMsg('ファイルサイズが50MBを超えています', 'error');
+    return;
+  }
+  upSelectedFile = file;
+  document.getElementById('upFileName').textContent = file.name;
+  document.getElementById('upFileSize').textContent = (file.size / 1024 / 1024).toFixed(1) + ' MB';
+  document.getElementById('upFileInfo').classList.add('show');
+  document.getElementById('upBtn').disabled = false;
+  hideUpMsg();
+}
+
+// ドラッグ＆ドロップ
+(function() {
+  var drop = document.getElementById('upDrop');
+  if (!drop) return;
+  drop.addEventListener('dragover', function(e) { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', function() { drop.classList.remove('dragover'); });
+  drop.addEventListener('drop', function(e) {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    var file = e.dataTransfer.files[0];
+    if (file) onUpFileSelected({ target: { files: [file] } });
+  });
+})();
+
+async function doUpload() {
+  if (!upSelectedFile) return;
+  var pin = document.getElementById('upPin').value.trim();
+  if (!pin) { showUpMsg('アクセスコードを入力してください', 'error'); return; }
+
+  var btn = document.getElementById('upBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="up-spinner"></span> アップロード中...';
+
+  var prog     = document.getElementById('upProgress');
+  var fill     = document.getElementById('upProgressFill');
+  var progText = document.getElementById('upProgressText');
+  prog.classList.add('show');
+  fill.style.width = '10%';
+  progText.textContent = 'ファイルを読み込み中...';
+  hideUpMsg();
+
+  try {
+    // Base64変換
+    var base64 = await new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload  = function() { resolve(reader.result.split(',')[1]); };
+      reader.onerror = reject;
+      reader.readAsDataURL(upSelectedFile);
+    });
+    fill.style.width = '40%';
+    progText.textContent = 'サーバーへ送信中...';
+
+    var res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action:   'uploadPdf',
+        fileName: upSelectedFile.name,
+        fileData: base64,
+        pin:      pin,
+        userId:   userId
+      })
+    });
+    fill.style.width = '85%';
+    progText.textContent = '保存中...';
+
+    var data = await res.json();
+    fill.style.width = '100%';
+
+    if (data.success) {
+      progText.textContent = '完了！';
+      showUpMsg('✅「' + upSelectedFile.name + '」のアップロードが完了しました！\nAIへの反映には数時間かかります。', 'success');
+      // リセット
+      upSelectedFile = null;
+      document.getElementById('upFileInput').value = '';
+      document.getElementById('upFileInfo').classList.remove('show');
+      document.getElementById('upPin').value = '';
+      btn.innerHTML = '⬆️ アップロードする';
+      setTimeout(function() {
+        prog.classList.remove('show');
+        fill.style.width = '0%';
+      }, 2500);
+      showToast('アップロード完了！');
+    } else {
+      throw new Error(data.error || 'アップロードに失敗しました');
+    }
+  } catch(e) {
+    fill.style.width = '0%';
+    prog.classList.remove('show');
+    showUpMsg('❌ エラー: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '⬆️ アップロードする';
+  }
+}
+
+function showUpMsg(text, type) {
+  var el = document.getElementById('upMsg');
+  el.textContent = text;
+  el.className = 'up-msg show ' + type;
+}
+function hideUpMsg() {
+  document.getElementById('upMsg').className = 'up-msg';
+}
+</script>
+</body>
+</html>
