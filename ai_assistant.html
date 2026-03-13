@@ -1140,7 +1140,7 @@ async function doUpload() {
 
       var res  = await fetch(GAS_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           action:   'uploadPdf',
           fileName: file.name,
