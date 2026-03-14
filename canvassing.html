@@ -264,7 +264,7 @@
       display: none;
       position: fixed;
       inset: 0;
-      z-index: 4000;
+      z-index: 6000; /* form-overlay(5000)・loading(8000)の間に配置 */
       pointer-events: none; /* 地図操作を通す（子要素だけpointer-events:auto） */
     }
     #pos-picker.active { display: block; }
@@ -289,15 +289,30 @@
       font-size: 13px; font-weight: 600; padding: 8px 12px; cursor: pointer;
     }
 
-    /* 中央クロスヘア（オプション表示） */
-    .pp-crosshair {
+    /* 中央インジケーター */
+    .pp-center-hint {
       position: absolute;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 32px;
+      margin-top: -50px; /* ボトムバー分だけ上にずらす */
       pointer-events: none;
-      opacity: 0.15;
-      margin-top: -30px; /* ボトムバー分だけ上にずらす */
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .pp-center-badge {
+      background: rgba(0,0,0,0.65);
+      color: white; font-size: 12px; font-weight: 700;
+      padding: 7px 16px; border-radius: 20px;
+      white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .pp-crosshair {
+      font-size: 36px;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+      animation: pp-pulse 2s infinite;
+    }
+    @keyframes pp-pulse {
+      0%,100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.15); opacity: 0.8; }
     }
 
     /* 下バー */
@@ -609,9 +624,15 @@
   <div class="pp-top">
     <div>
       <div class="pp-top-title">📍 位置を確認・修正してください</div>
-      <div class="pp-top-hint">ピンをドラッグして正確な場所に合わせてください</div>
+      <div class="pp-top-hint">緑のピンをドラッグして正確な場所に合わせてください</div>
     </div>
-    <button class="pp-cancel" onclick="closePosPicker()">キャンセル</button>
+    <button class="pp-cancel" onclick="closePosPicker()">✕ キャンセル</button>
+  </div>
+
+  <!-- 中央インジケーター（地図の上に浮かぶ。pointer-events:none で地図操作はそのまま通る） -->
+  <div class="pp-center-hint">
+    <div class="pp-crosshair">📍</div>
+    <div class="pp-center-badge">👆 ピンをドラッグして位置を調整</div>
   </div>
 
   <!-- 下バー（住所表示 + 確定ボタン） -->
@@ -619,7 +640,7 @@
     <div class="pp-addr-label">📍 取得した住所</div>
     <div class="pp-addr-text loading" id="pp-addr">GPS位置から住所を取得中...</div>
     <button class="pp-confirm-btn" id="pp-confirm-btn" onclick="confirmPosition()" disabled>
-      この位置で記録する →
+      ✅ この位置で記録する
     </button>
   </div>
 </div>
@@ -1045,7 +1066,10 @@ function addMapMarker(v) {
 // 位置確認オーバーレイ（Step1: ドラッグで位置修正）
 // ============================================================
 function openPosPicker() {
-  // ① まずオーバーレイを表示（住所取得の成否に関わらず必ず表示）
+  // ① form-overlay が残っていれば必ず閉じる（安全策）
+  document.getElementById('form-overlay').style.display = 'none';
+
+  // ② pos-picker オーバーレイを最初に表示（住所取得の成否に関わらず必ず表示）
   var addrEl    = document.getElementById('pp-addr');
   var confirmBtn = document.getElementById('pp-confirm-btn');
   addrEl.textContent = 'GPS位置から住所を取得中...';
