@@ -259,6 +259,79 @@
     }
     .end-btn:active { opacity: 0.85; }
 
+    /* ===== 位置確認オーバーレイ（Step1: ピンをドラッグして位置確認） ===== */
+    #pos-picker {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 4000;
+      pointer-events: none; /* 地図操作を通す（子要素だけpointer-events:auto） */
+    }
+    #pos-picker.active { display: block; }
+
+    /* 上バー */
+    .pp-top {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      background: var(--green);
+      color: white;
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      pointer-events: auto;
+      z-index: 10;
+    }
+    .pp-top-title { font-size: 14px; font-weight: 700; }
+    .pp-top-hint  { font-size: 11px; opacity: 0.88; margin-top: 2px; }
+    .pp-cancel {
+      background: rgba(255,255,255,0.2); border: none;
+      border-radius: 8px; color: white;
+      font-size: 13px; font-weight: 600; padding: 8px 12px; cursor: pointer;
+    }
+
+    /* 中央クロスヘア（オプション表示） */
+    .pp-crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 32px;
+      pointer-events: none;
+      opacity: 0.15;
+      margin-top: -30px; /* ボトムバー分だけ上にずらす */
+    }
+
+    /* 下バー */
+    .pp-bottom {
+      position: absolute;
+      bottom: 60px; left: 0; right: 0;
+      background: white;
+      border-radius: 18px 18px 0 0;
+      padding: 14px 16px 16px;
+      box-shadow: 0 -3px 16px rgba(0,0,0,0.12);
+      pointer-events: auto;
+    }
+    .pp-addr-label {
+      font-size: 11px; font-weight: 700; color: #888;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+    .pp-addr-text {
+      font-size: 14px; font-weight: 600; color: #333;
+      min-height: 40px; line-height: 1.5;
+      margin-bottom: 12px; padding: 8px 10px;
+      background: #f5f7fa; border-radius: 8px;
+    }
+    .pp-addr-text.loading { color: #aaa; font-style: italic; }
+    .pp-confirm-btn {
+      width: 100%; padding: 15px;
+      background: var(--green); color: white;
+      border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 700; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .pp-confirm-btn:active { background: var(--green-dark); }
+    .pp-confirm-btn:disabled { background: #bbb; cursor: not-allowed; }
+
     /* ===== フォームオーバーレイ（iOS zoom防止でappの外に置く） ===== */
     #form-overlay {
       display: none;
@@ -528,6 +601,30 @@
 </div>
 
 <!-- ============================================================
+     位置確認オーバーレイ（Step1: ピンをドラッグして正確な位置を選ぶ）
+     地図の上に重ねる。中央エリアはpointer-events:noneで地図操作可能。
+     ============================================================ -->
+<div id="pos-picker">
+  <!-- 上バー -->
+  <div class="pp-top">
+    <div>
+      <div class="pp-top-title">📍 位置を確認・修正してください</div>
+      <div class="pp-top-hint">ピンをドラッグして正確な場所に合わせてください</div>
+    </div>
+    <button class="pp-cancel" onclick="closePosPicker()">キャンセル</button>
+  </div>
+
+  <!-- 下バー（住所表示 + 確定ボタン） -->
+  <div class="pp-bottom">
+    <div class="pp-addr-label">📍 取得した住所</div>
+    <div class="pp-addr-text loading" id="pp-addr">GPS位置から住所を取得中...</div>
+    <button class="pp-confirm-btn" id="pp-confirm-btn" onclick="confirmPosition()" disabled>
+      この位置で記録する →
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
      フォームオーバーレイ
      iOS zoom防止のため body 直下に配置（#app外）
      ============================================================ -->
@@ -673,6 +770,13 @@ var userWeight    = 60;   // kg
 var lastRecordedPos  = null;
 var lastRecordedTime = null;
 
+// 位置確認オーバーレイ用
+var posMarker     = null;  // ドラッグ可能な仮ピン
+var pickedLat     = null;  // 確定した緯度
+var pickedLng     = null;  // 確定した経度
+var pickedAddress = '';    // 確定した住所
+var geocodeTimer  = null;  // dragend後のデバウンス用
+
 // 8段階ステータスの色
 var STATUS_COLORS = {
   'A':  '#e53935',
@@ -744,11 +848,11 @@ function initNavigation() {
         distOverlay.style.display = 'flex';
         setTimeout(function() { if (map) map.invalidateSize(); }, 120);
       } else if (view === 'record') {
-        // 記録タブ: フォームオーバーレイを開く
+        // 記録タブ: まず位置確認オーバーレイを開く（Step1）
         fab.classList.add('hidden');
         distOverlay.style.display = 'none';
-        openForm();
-        // ナビはmapに戻す（フォームを閉じたときのため）
+        openPosPicker();
+        // ナビはmapに戻す（オーバーレイを閉じたときのため）
         document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
         document.querySelector('.nav-btn[data-view="map"]').classList.add('active');
       } else if (view === 'list') {
@@ -938,9 +1042,117 @@ function addMapMarker(v) {
 }
 
 // ============================================================
-// フォームオーバーレイ
+// 位置確認オーバーレイ（Step1: ドラッグで位置修正）
 // ============================================================
-function openForm() {
+function openPosPicker() {
+  // 地図を表示状態にしてサイズ調整
+  setTimeout(function() { if (map) map.invalidateSize(); }, 100);
+
+  // 仮ピンの初期位置（現在地 or デフォルト）
+  var lat = currentLat !== null ? currentLat : DEFAULT_LAT;
+  var lng = currentLng !== null ? currentLng : DEFAULT_LNG;
+
+  // 既存の仮ピンを削除
+  if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
+
+  // ドラッグ可能なピンを地図に追加
+  posMarker = L.marker([lat, lng], {
+    draggable: true,
+    autoPan: true,
+    icon: L.divIcon({
+      html: '<div style="'
+          + 'width:36px;height:36px;'
+          + 'background:var(--green);'
+          + 'border:3px solid white;'
+          + 'border-radius:50% 50% 50% 0;'
+          + 'transform:rotate(-45deg);'
+          + 'box-shadow:0 3px 10px rgba(0,0,0,0.35);'
+          + '"></div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      className: ''
+    })
+  }).addTo(map);
+
+  // 地図をピン位置に移動
+  map.setView([lat, lng], Math.max(map.getZoom(), 17));
+
+  // 住所表示をリセット
+  var addrEl   = document.getElementById('pp-addr');
+  var confirmBtn = document.getElementById('pp-confirm-btn');
+  addrEl.textContent = 'GPS位置から住所を取得中...';
+  addrEl.classList.add('loading');
+  confirmBtn.disabled = true;
+
+  // 初期位置の住所を取得
+  fetchAddressForPin(lat, lng);
+
+  // ドラッグ中: 「移動中...」表示
+  posMarker.on('dragstart', function() {
+    clearTimeout(geocodeTimer);
+    addrEl.textContent = '🔄 住所を取得中...';
+    addrEl.classList.add('loading');
+    confirmBtn.disabled = true;
+  });
+
+  // ドラッグ終了: 新しい位置の住所を取得（300msデバウンス）
+  posMarker.on('dragend', function(e) {
+    var pos = e.target.getLatLng();
+    clearTimeout(geocodeTimer);
+    geocodeTimer = setTimeout(function() {
+      fetchAddressForPin(pos.lat, pos.lng);
+    }, 300);
+  });
+
+  // オーバーレイを表示
+  document.getElementById('pos-picker').classList.add('active');
+}
+
+function fetchAddressForPin(lat, lng) {
+  var addrEl    = document.getElementById('pp-addr');
+  var confirmBtn = document.getElementById('pp-confirm-btn');
+
+  reverseGeocodeDetailed(lat, lng, function(addr) {
+    pickedLat     = lat;
+    pickedLng     = lng;
+    pickedAddress = addr;
+
+    addrEl.textContent = addr || '住所を取得できませんでした';
+    addrEl.classList.remove('loading');
+    confirmBtn.disabled = false;
+  });
+}
+
+function closePosPicker() {
+  // 仮ピンを削除
+  if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
+  document.getElementById('pos-picker').classList.remove('active');
+
+  // FAB・オーバーレイを元に戻す
+  document.getElementById('fab').classList.remove('hidden');
+  document.getElementById('dist-overlay').style.display = 'flex';
+  setTimeout(function() { if (map) map.invalidateSize(); }, 120);
+}
+
+function confirmPosition() {
+  // 仮ピンを削除してStep2（フォーム）へ
+  if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
+  document.getElementById('pos-picker').classList.remove('active');
+
+  // 確定した位置情報をcurrentLat/Lngに上書き
+  if (pickedLat !== null) {
+    currentLat = pickedLat;
+    currentLng = pickedLng;
+  }
+
+  // フォームを開く（住所は確定済みのものを渡す）
+  openForm(pickedAddress);
+}
+
+// ============================================================
+// フォームオーバーレイ（Step2: 情報入力）
+// ============================================================
+function openForm(prefilledAddress) {
   // フォームリセット
   document.getElementById('f-address').value = '';
   document.getElementById('f-name').value    = '';
@@ -955,9 +1167,14 @@ function openForm() {
   overlay.scrollTop = 0;
   overlay.style.display = 'block';
 
-  // GPS住所を自動取得
-  if (currentLat !== null) {
-    reverseGeocode(currentLat, currentLng, function(addr) {
+  // 住所をセット:
+  //   Step1（位置確認）から来た場合 → prefilledAddress を使う（再ジオコードしない）
+  //   直接フォームを開いた場合      → GPSから詳細住所を取得
+  if (prefilledAddress) {
+    document.getElementById('f-address').value = prefilledAddress;
+  } else if (currentLat !== null) {
+    document.getElementById('f-address').value = '住所を取得中...';
+    reverseGeocodeDetailed(currentLat, currentLng, function(addr) {
       document.getElementById('f-address').value = addr;
     });
   }
@@ -1312,6 +1529,47 @@ function reverseGeocode(lat, lng, cb) {
       cb(result || d.display_name || lat.toFixed(5) + ', ' + lng.toFixed(5));
     })
     .catch(function() { cb(lat.toFixed(5) + ', ' + lng.toFixed(5)); });
+}
+
+// 大字・丁目・番地・枝番まで含む詳細住所取得（位置確認ピン用）
+function reverseGeocodeDetailed(lat, lng, cb) {
+  fetch(
+    'https://nominatim.openstreetmap.org/reverse?lat=' + lat
+    + '&lon=' + lng
+    + '&format=json&addressdetails=1&accept-language=ja&zoom=18',
+    { headers: { 'User-Agent': 'CanvassingApp/1.0' } }
+  )
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var a = d.address || {};
+
+      // 日本語住所の組み立て（都道府県 → 市区町村 → 大字/地区 → 丁目 → 番地 → 号）
+      var pref   = a.state          || '';          // 神奈川県
+      var city   = a.city || a.town || a.village || a.county || ''; // 座間市
+      var ward   = a.city_district  || '';          // 区（政令市）
+      var oaza   = a.suburb || a.hamlet || '';      // 大字・地区名
+      var chome  = a.quarter || a.neighbourhood || ''; // 丁目・字
+      var road   = a.road           || '';          // 番地相当（Nominatim では road に入ることが多い）
+      var num    = a.house_number   || '';          // 号・枝番
+
+      var addr = pref + city + ward + oaza + chome + road + num;
+
+      // フォールバック: 組み立てできなければ display_name の後半部分、それもなければ座標
+      if (!addr) {
+        if (d.display_name) {
+          // display_name は "番地, 大字, 市, 県, 郵便番号, 国" の順なので先頭3〜4要素を逆順に
+          var parts = d.display_name.split(', ');
+          addr = parts.slice(0, Math.min(4, parts.length)).reverse().join('');
+        } else {
+          addr = lat.toFixed(6) + ', ' + lng.toFixed(6);
+        }
+      }
+      cb(addr);
+    })
+    .catch(function() {
+      // ネットワークエラー時は座標を返す
+      cb(lat.toFixed(6) + ', ' + lng.toFixed(6));
+    });
 }
 
 function formatDist(m) {
