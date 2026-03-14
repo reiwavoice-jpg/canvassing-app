@@ -4,306 +4,350 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#06C755">
   <title>個別訪問記録</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
+    /* ===== CSS変数 ===== */
+    :root {
+      --green:        #06C755;
+      --green-dark:   #05A847;
+      --navy:         #1a2c5b;
+      --status-a:     #e53935;
+      --status-bplus: #ff9800;
+      --status-bcir:  #ffd54f;
+      --status-b:     #4caf50;
+      --status-bmin:  #9e9e9e;
+      --status-ccir:  #42a5f5;
+      --status-c:     #81d4fa;
+      --status-d:     #212121;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
     html, body {
       height: 100%;
-      margin: 0; padding: 0;
       overflow: hidden;
-    }
-    body {
       font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Meiryo', sans-serif;
     }
 
-    /*
-      iOSでは body に position:fixed を当てても正しく機能しない。
-      ラッパーdiv (#app) に当てることでビューポートにピッタリ合わせる。
-    */
-    #app {
+    body {
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      background: #f0f2f5;
+      width: 100%;
+      touch-action: pan-y;
     }
 
-    /* ===== ヘッダー ===== */
-    #header {
-      background: linear-gradient(135deg, #1a2c5b 0%, #2d4a9e 100%);
-      color: white;
-      padding: 8px 14px;
+    /* iOS: 入力系は16px強制でズーム防止 */
+    input, select, textarea { font-size: 16px !important; touch-action: manipulation; }
+    button, a { touch-action: manipulation; }
+
+    /* ===== 地図 ===== */
+    #map {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      bottom: 60px;
+      z-index: 1;
+    }
+
+    /* ===== 歩行距離オーバーレイ（地図右上） ===== */
+    #dist-overlay {
+      position: fixed;
+      top: 12px; right: 12px;
+      background: rgba(255,255,255,0.93);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--navy);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+      z-index: 500;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      flex-shrink: 0;
+      gap: 5px;
+      pointer-events: none;
+    }
+    #dist-overlay .dist-count {
+      color: var(--green-dark);
+    }
+
+    /* ===== GPS FABボタン ===== */
+    #fab {
+      position: fixed;
+      bottom: 80px; right: 20px;
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      background: var(--green);
+      color: white;
+      border: none;
+      font-size: 26px;
+      box-shadow: 0 4px 12px rgba(6,199,85,0.4);
+      cursor: pointer;
       z-index: 600;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.2s, background 0.2s;
+    }
+    #fab:active { transform: scale(0.93); background: var(--green-dark); }
+    #fab.recording {
+      background: #e53935;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 4px 12px rgba(229,57,53,0.4); }
+      50%      { box-shadow: 0 4px 22px rgba(229,57,53,0.7); }
+    }
+
+    /* 地図タブ非表示時にFABも隠す */
+    #fab.hidden { display: none; }
+
+    /* ===== ボトムナビ ===== */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 60px;
+      background: white;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+      z-index: 1000;
+    }
+    .nav-btn {
+      flex: 1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 2px;
+      border: none; background: none;
+      color: #999; font-size: 10px;
+      padding: 6px 4px; cursor: pointer;
+      transition: color 0.2s;
+    }
+    .nav-btn.active { color: var(--green); }
+    .nav-btn .nav-icon { font-size: 22px; }
+
+    /* ===== パネル共通 ===== */
+    .panel {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 60px;
+      background: #f5f7fa;
+      z-index: 900;
+      display: none;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .panel.active { display: block; }
+
+    .panel-header {
+      position: sticky; top: 0;
+      background: var(--green);
+      color: white;
+      padding: 16px 20px;
+      font-size: 17px; font-weight: 700;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+      z-index: 10;
+    }
+    .panel-body { padding: 16px; }
+
+    /* ===== 一覧パネル ===== */
+    .filter-bar {
+      display: flex; gap: 6px; margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      padding: 7px 14px;
+      border: 2px solid #ddd;
+      border-radius: 20px;
+      background: white; color: #666;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn.active {
+      border-color: var(--green);
+      background: var(--green); color: white;
+    }
+    .period-row {
+      display: none;
+      gap: 8px; align-items: center;
+      margin-bottom: 14px; font-size: 13px;
+    }
+    .period-row.show { display: flex; }
+    .period-row input { flex: 1; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; }
+    .period-apply {
+      padding: 8px 14px; background: var(--green); color: white;
+      border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .visit-item {
+      background: white; border-radius: 10px;
+      padding: 14px; margin-bottom: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    .visit-item-header {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 6px;
+    }
+    .visit-date { font-size: 12px; color: #888; }
+    .status-badge {
+      padding: 3px 10px; border-radius: 12px;
+      font-size: 11px; font-weight: 700; color: white;
+    }
+    .visit-address { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .visit-meta { font-size: 12px; color: #666; line-height: 1.6; }
+
+    /* ===== 情勢パネル ===== */
+    .vote-hero {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white; border-radius: 14px;
+      padding: 22px; margin-bottom: 14px;
+    }
+    .vote-hero-label { font-size: 13px; opacity: 0.9; margin-bottom: 6px; }
+    .vote-hero-num { font-size: 40px; font-weight: 700; margin-bottom: 14px; }
+    .vote-formula { font-size: 11px; opacity: 0.8; line-height: 1.7; }
+
+    .meter-wrap { margin: 14px 0; }
+    .meter-bar {
+      height: 36px; background: rgba(255,255,255,0.3);
+      border-radius: 18px; overflow: hidden; position: relative;
+    }
+    .meter-fill {
+      height: 100%;
+      background: white;
+      border-radius: 18px;
+      transition: width 0.5s;
+      display: flex; align-items: center; justify-content: center;
+      color: #764ba2; font-weight: 700; font-size: 13px;
+    }
+    .meter-target-lbl {
+      position: absolute; right: 12px; top: 50%;
+      transform: translateY(-50%);
+      font-size: 11px; font-weight: 700; color: white;
+      cursor: pointer;
+    }
+    .meter-target-lbl:hover { opacity: 0.8; }
+
+    .dash-card {
+      background: white; border-radius: 12px;
+      padding: 18px; margin-bottom: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .dash-card-title {
+      font-size: 14px; font-weight: 700; color: #333;
+      margin-bottom: 14px;
+    }
+    .stat-row {
+      display: flex; justify-content: space-between;
+      align-items: center; padding: 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row .sr-label { font-size: 13px; color: #666; }
+    .stat-row .sr-value { font-size: 19px; font-weight: 700; color: #333; }
+    .sr-value.editable {
+      cursor: pointer; border: 2px dashed transparent;
+      border-radius: 6px; padding: 2px 6px;
+    }
+    .sr-value.editable:hover { border-color: var(--green); background: #f0faf3; }
+    .sr-value.editable:focus { outline: none; border-color: var(--green); background: white; }
+
+    .end-btn {
+      width: 100%; margin-top: 6px;
+      padding: 14px; border: none; border-radius: 10px;
+      background: #546E7A; color: white;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+    }
+    .end-btn:active { opacity: 0.85; }
+
+    /* ===== 位置確認オーバーレイ（Step1: ピンをドラッグして位置確認） ===== */
+    #pos-picker {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 6000; /* form-overlay(5000)・loading(8000)の間に配置 */
+      pointer-events: none; /* 地図操作を通す（子要素だけpointer-events:auto） */
+    }
+    #pos-picker.active { display: block; }
+
+    /* 上バー */
+    .pp-top {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      background: var(--green);
+      color: white;
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      pointer-events: auto;
+      z-index: 10;
+    }
+    .pp-top-title { font-size: 14px; font-weight: 700; }
+    .pp-top-hint  { font-size: 11px; opacity: 0.88; margin-top: 2px; }
+    .pp-cancel {
+      background: rgba(255,255,255,0.2); border: none;
+      border-radius: 8px; color: white;
+      font-size: 13px; font-weight: 600; padding: 8px 12px; cursor: pointer;
+    }
+
+    /* 中央インジケーター */
+    .pp-center-hint {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      margin-top: -50px; /* ボトムバー分だけ上にずらす */
+      pointer-events: none;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .pp-center-badge {
+      background: rgba(0,0,0,0.65);
+      color: white; font-size: 12px; font-weight: 700;
+      padding: 7px 16px; border-radius: 20px;
+      white-space: nowrap;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
-    #header h1 { font-size: 14px; font-weight: 700; }
-    #stats-bar { display: flex; gap: 16px; }
-    .stat-item { display: flex; flex-direction: column; align-items: center; }
-    .stat-value { font-size: 19px; font-weight: 700; line-height: 1; }
-    .stat-label { font-size: 10px; opacity: 0.75; }
-
-    /* ===== 地図エリア（flex: 1 で残りを使う） ===== */
-    #map-wrap {
-      flex: 1;
-      position: relative;
-      min-height: 100px;
-      overflow: hidden;
+    .pp-crosshair {
+      font-size: 36px;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+      animation: pp-pulse 2s infinite;
     }
-    #map { width: 100%; height: 100%; }
+    @keyframes pp-pulse {
+      0%,100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.15); opacity: 0.8; }
+    }
 
-    /* GPS FAB */
-    #gps-fab {
+    /* 下バー */
+    .pp-bottom {
       position: absolute;
-      bottom: 10px; right: 12px;
-      width: 42px; height: 42px;
-      background: white;
-      border: none; border-radius: 50%;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-      font-size: 20px; cursor: pointer;
-      z-index: 500;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    /* ===== 下部固定パネル ===== */
-    #bottom-panel {
-      height: 52vh;
+      bottom: 60px; left: 0; right: 0;
       background: white;
       border-radius: 18px 18px 0 0;
+      padding: 14px 16px 16px;
       box-shadow: 0 -3px 16px rgba(0,0,0,0.12);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      overflow: hidden;
-      position: relative;
-      z-index: 600;
+      pointer-events: auto;
     }
-
-    .panel-handle {
-      width: 36px; height: 4px;
-      background: #ddd; border-radius: 2px;
-      margin: 10px auto 0;
-      flex-shrink: 0;
+    .pp-addr-label {
+      font-size: 11px; font-weight: 700; color: #888;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 6px;
     }
-
-    /* パネルビュー切替 */
-    .panel-view {
-      display: none;
-      flex-direction: column;
-      flex: 1;
-      overflow: hidden;
+    .pp-addr-text {
+      font-size: 14px; font-weight: 600; color: #333;
+      min-height: 40px; line-height: 1.5;
+      margin-bottom: 12px; padding: 8px 10px;
+      background: #f5f7fa; border-radius: 8px;
     }
-    .panel-view.active { display: flex; }
-
-
-    /* ===== IDLEパネル ===== */
-    #panel-idle {
-      padding: 10px 16px 14px;
-      gap: 8px; /* ボタン間の隙間 */
-      /* display/flex-direction は .panel-view.active から継承 */
-    }
-    .idle-hint {
-      font-size: 11px; color: #aaa;
-      text-align: center;
-      flex-shrink: 0;
-    }
-    /* 3ボタン共通 — flex:1 で縦を3等分 */
-    .idle-btn {
-      flex: 1;
-      width: 100%;
-      min-height: 0;
-      border-radius: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-      letter-spacing: 0.02em;
-    }
-    .idle-btn:active { opacity: 0.82; }
-    .idle-main {
-      background: #1a2c5b; color: white;
-      border: none; font-size: 18px;
-    }
-    .idle-sub {
-      background: white; color: #1a2c5b;
-      border: 2px solid #1a2c5b; font-size: 15px;
-    }
-    .idle-end {
-      background: white; color: #546E7A;
-      border: 2px solid #546E7A; font-size: 15px;
-    }
-
-
-    /* ===== FORMパネル ===== */
-    #panel-form {
-      overflow: hidden;
-      /* スクロールはパネル内のdivで制御。ここでoverflow:autoを
-         設定すると二重スクロールが発生するため hidden にする。 */
-    }
-    .panel-title {
-      font-size: 15px; font-weight: 700;
-      color: #1a2c5b; margin-bottom: 10px;
-      flex-shrink: 0;
-    }
-
-    /* コンパクトフォーム */
-    .form-row {
-      display: flex; gap: 8px; margin-bottom: 8px;
-    }
-    .form-cell { flex: 1; min-width: 0; }
-    .form-cell.wide { flex: 2; }
-
-    .form-label {
-      display: block; font-size: 11px;
-      font-weight: 600; color: #666; margin-bottom: 3px;
-    }
-    .form-input {
-      width: 100%;
-      padding: 16px 12px;
-      border: 2px solid #e0e0e0;
-      border-radius: 10px;
-      font-size: 16px;
-      -webkit-appearance: none; appearance: none;
-      background: white;
-      transition: border-color 0.2s;
-    }
-    /* 住所・名前の縦幅（結果ボタン以上） */
-    #f-address, #f-name {
-      min-height: 68px;
-    }
-    .form-input:focus { outline: none; border-color: #1a2c5b; }
-
-    /* iOS/Android: 全inputで16px強制（自動ズーム防止） */
-    input, select, textarea {
-      font-size: 16px !important;
-      touch-action: manipulation; /* ダブルタップズーム無効 */
-    }
-    button, a {
-      touch-action: manipulation; /* ボタンのダブルタップズームも無効 */
-    }
-
-    /* 訪問結果ボタン（5個・各ボタンは全体の約1/10幅、右側は空白） */
-    .result-section { margin-bottom: 8px; }
-    .result-grid {
-      display: flex;
-      gap: 4px;
-    }
-    .result-btn {
-      flex: 0 0 auto;
-      width: calc((100% - 4 * 4px) / 10); /* 全幅の1/10 ≒ 従来の半分 */
-      padding: 10px 2px;
-      border: 2px solid #e0e0e0;
-      border-radius: 10px;
-      background: white;
-      font-size: 11px; font-weight: 600;
-      cursor: pointer;
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
-      transition: all 0.15s;
-    }
-    .result-btn .em { font-size: 18px; }
-    .result-btn.sel-在宅 { background:#E3F2FD; border-color:#2196F3; color:#1565C0; }
-    .result-btn.sel-不在 { background:#FFF3E0; border-color:#FF9800; color:#E65100; }
-    .result-btn.sel-支持 { background:#E8F5E9; border-color:#43A047; color:#1B5E20; }
-    .result-btn.sel-反対 { background:#FFEBEE; border-color:#E53935; color:#B71C1C; }
-    .result-btn.sel-中立 { background:#F5F5F5; border-color:#9E9E9E; color:#424242; }
-
-    /* フォームフッター（スクロールしても常に表示） */
-    .form-footer {
-      display: flex; gap: 8px;
-      padding: 8px 0 4px;
-      position: sticky; bottom: 0;
-      background: white;
-    }
-    .btn {
-      flex: 1;
-      padding: 13px 6px;
+    .pp-addr-text.loading { color: #aaa; font-style: italic; }
+    .pp-confirm-btn {
+      width: 100%; padding: 15px;
+      background: var(--green); color: white;
       border: none; border-radius: 12px;
-      font-size: 14px; font-weight: 600;
-      cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 4px;
+      font-size: 16px; font-weight: 700; cursor: pointer;
+      transition: background 0.2s;
     }
-    .btn:active { opacity: 0.8; }
-    .btn-success { background: #43A047; color: white; }
-    .btn-outline { background: white; color: #1a2c5b; border: 2px solid #1a2c5b; flex: 0.6; }
-    .btn:disabled { opacity: 0.5; }
+    .pp-confirm-btn:active { background: var(--green-dark); }
+    .pp-confirm-btn:disabled { background: #bbb; cursor: not-allowed; }
 
-
-    /* ===== HISTORYパネル ===== */
-    #panel-history { overflow: hidden; }
-    .history-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 14px 6px;
-      flex-shrink: 0;
-    }
-    .history-header-title {
-      font-size: 15px; font-weight: 700; color: #1a2c5b;
-    }
-    .history-close-btn {
-      padding: 6px 14px;
-      border: 2px solid #1a2c5b;
-      border-radius: 10px;
-      background: white; color: #1a2c5b;
-      font-size: 12px; font-weight: 600; cursor: pointer;
-    }
-    #history-content {
-      overflow-y: auto;
-      flex: 1;
-      padding: 4px 14px 12px;
-    }
-
-    /* 集計カード */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 5px; margin-bottom: 10px;
-    }
-    .stats-card {
-      text-align: center; padding: 8px 2px;
-      background: #f9f9f9; border-radius: 10px;
-    }
-    .stats-card .sc-em  { font-size: 16px; }
-    .stats-card .sc-num { font-size: 18px; font-weight: 700; }
-    .stats-card .sc-lbl { font-size: 10px; color: #888; }
-
-    /* 履歴リスト */
-    .hist-item { padding: 9px 0; border-bottom: 1px solid #f0f0f0; }
-    .hist-row1 { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
-    .hist-result-em  { font-size: 16px; }
-    .hist-result-lbl { font-size: 13px; font-weight: 700; }
-    .hist-name  { color: #555; font-size: 12px; }
-    .hist-addr  { color: #888; font-size: 11px; }
-    .hist-memo  { color: #666; font-size: 11px; margin-top: 2px; }
-
-
-    /* ===== トースト ===== */
-    #toast {
-      position: fixed;
-      bottom: 90px; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.82);
-      color: white;
-      padding: 11px 20px;
-      border-radius: 25px;
-      font-size: 14px;
-      z-index: 2000;
-      display: none;
-      white-space: nowrap;
-      max-width: 90vw; text-align: center;
-    }
-
-    /* ===================================================================
-       フォームオーバーレイ
-       #app（position:fixed + overflow:hidden）の外に置くことで
-       overflow-y:auto の scrollable context になり、
-       iOSがズームではなくスクロールでinputを見せるようになる
-       =================================================================== */
+    /* ===== フォームオーバーレイ（iOS zoom防止でappの外に置く） ===== */
     #form-overlay {
       display: none;
       position: fixed;
@@ -315,201 +359,398 @@
     }
     .fo-header {
       position: sticky; top: 0;
-      background: linear-gradient(135deg, #1a2c5b 0%, #2d4a9e 100%);
-      color: white; padding: 10px 14px;
+      background: var(--green);
+      color: white; padding: 12px 16px;
       display: flex; align-items: center; justify-content: space-between;
-      z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-      flex-shrink: 0;
+      z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.18);
     }
-    .fo-back-btn {
-      background: rgba(255,255,255,0.2); border: none;
+    .fo-back {
+      background: rgba(255,255,255,0.22); border: none;
       border-radius: 8px; color: white;
-      font-size: 13px; font-weight: 600;
-      padding: 8px 12px; cursor: pointer;
+      font-size: 13px; font-weight: 600; padding: 8px 12px; cursor: pointer;
     }
-    .fo-header-title { font-size: 15px; font-weight: 700; }
-    .fo-spacer { width: 82px; }
-    .fo-body { padding: 16px 16px 60px; }
+    .fo-title { font-size: 15px; font-weight: 700; }
+    .fo-spacer { width: 74px; }
+    .fo-body { padding: 18px 16px 80px; }
+
+    /* フォーム内パーツ */
+    .fg { margin-bottom: 18px; }
+    .fg-label {
+      display: block; font-size: 12px; font-weight: 700;
+      color: #555; margin-bottom: 8px;
+    }
+    .fg-label .req { color: #e53935; }
+    .fg-input {
+      width: 100%; padding: 13px 14px;
+      border: 1.5px solid #ddd; border-radius: 10px;
+      font-size: 16px; background: white;
+      -webkit-appearance: none; appearance: none;
+      transition: border-color 0.2s;
+    }
+    .fg-input:focus { outline: none; border-color: var(--green); }
+
+    /* ラジオグループ */
+    .radio-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .radio-opt {
+      flex: 1; min-width: 48px;
+      padding: 11px 6px;
+      border: 2px solid #ddd; border-radius: 8px;
+      background: white; font-size: 13px; font-weight: 600;
+      text-align: center; cursor: pointer; transition: all 0.2s;
+    }
+    .radio-opt.sel {
+      border-color: var(--green);
+      background: #e8f5e9; color: var(--green-dark);
+    }
+
+    /* 8段階ステータスボタン */
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .status-opt {
+      padding: 14px 4px;
+      border: 3px solid #ddd; border-radius: 8px;
+      background: white; cursor: pointer;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 3px;
+      font-size: 11px; font-weight: 700;
+      text-align: center; transition: all 0.2s;
+    }
+    .status-opt .s-icon { font-size: 22px; }
+    .status-opt:active { transform: scale(0.96); }
+    .status-opt.sel { transform: scale(1.04); box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
+
+    .status-opt[data-s="A"]  { border-color: var(--status-a); }
+    .status-opt[data-s="A"].sel  { background: #ffebee; }
+    .status-opt[data-s="B+"] { border-color: var(--status-bplus); }
+    .status-opt[data-s="B+"].sel { background: #fff3e0; }
+    .status-opt[data-s="B○"] { border-color: var(--status-bcir); }
+    .status-opt[data-s="B○"].sel { background: #fffde7; }
+    .status-opt[data-s="B"]  { border-color: var(--status-b); }
+    .status-opt[data-s="B"].sel  { background: #e8f5e9; }
+    .status-opt[data-s="B-"] { border-color: var(--status-bmin); }
+    .status-opt[data-s="B-"].sel { background: #f5f5f5; }
+    .status-opt[data-s="C○"] { border-color: var(--status-ccir); }
+    .status-opt[data-s="C○"].sel { background: #e3f2fd; }
+    .status-opt[data-s="C"]  { border-color: var(--status-c); }
+    .status-opt[data-s="C"].sel  { background: #e1f5fe; }
+    .status-opt[data-s="D"]  { border-color: var(--status-d); }
+    .status-opt[data-s="D"].sel  { background: #fafafa; }
+
+    /* 再訪チェック */
+    .revisit-label {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 14px; cursor: pointer; padding: 4px 0;
+    }
+    .revisit-label input { width: 18px; height: 18px; cursor: pointer; }
+
+    /* 保存ボタン */
+    .fo-save-btn {
+      width: 100%; padding: 16px;
+      background: var(--green); color: white;
+      border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 700; cursor: pointer;
+      margin-top: 20px; transition: background 0.2s;
+    }
+    .fo-save-btn:active { background: var(--green-dark); }
+    .fo-save-btn:disabled { background: #bbb; cursor: not-allowed; }
+
+    /* ===== トースト ===== */
+    #toast {
+      position: fixed;
+      bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.82);
+      color: white; padding: 11px 22px;
+      border-radius: 24px; font-size: 14px;
+      z-index: 9999; display: none;
+      white-space: nowrap; max-width: 90vw; text-align: center;
+    }
 
     /* ===== ローディング ===== */
     #loading {
       position: fixed; inset: 0;
-      background: rgba(255,255,255,0.94);
+      background: rgba(255,255,255,0.95);
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      z-index: 3000;
+      z-index: 8000;
     }
     .spinner {
-      width: 38px; height: 38px;
-      border: 4px solid #e0e0e0;
-      border-top-color: #1a2c5b;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+      width: 40px; height: 40px;
+      border: 4px solid #e0e0e0; border-top-color: var(--green);
+      border-radius: 50%; animation: spin 0.9s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading p { margin-top: 12px; color: #666; font-size: 14px; }
   </style>
 </head>
-
 <body>
-<div id="app">
 
-<!-- ローディング -->
+<!-- ===== 地図 ===== -->
+<div id="map"></div>
+
+<!-- ===== 歩行距離オーバーレイ（地図右上） ===== -->
+<div id="dist-overlay">
+  🚶 <span id="dist-val">0m</span>　 ✅ <span class="dist-count" id="visit-val">0件</span>
+</div>
+
+<!-- ===== GPS FAB ===== -->
+<button id="fab" title="GPS記録開始/停止">▶️</button>
+
+<!-- ===== 一覧パネル ===== -->
+<div class="panel" id="panel-list">
+  <div class="panel-header">📋 訪問履歴</div>
+  <div class="panel-body">
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="all">全て</button>
+      <button class="filter-btn" data-filter="today">今日</button>
+      <button class="filter-btn" data-filter="revisit">再訪対象</button>
+      <button class="filter-btn" data-filter="period">期間指定</button>
+    </div>
+    <div class="period-row" id="period-row">
+      <input type="date" id="start-date">
+      <span>〜</span>
+      <input type="date" id="end-date">
+      <button class="period-apply" onclick="applyPeriodFilter()">適用</button>
+    </div>
+    <div id="visit-list"></div>
+  </div>
+</div>
+
+<!-- ===== 情勢パネル ===== -->
+<div class="panel" id="panel-dashboard">
+  <div class="panel-header">📊 情勢ダッシュボード</div>
+  <div class="panel-body">
+
+    <!-- 見込み票数ヒーロー -->
+    <div class="vote-hero">
+      <div class="vote-hero-label">見込み票数（B+以上×2×0.7）</div>
+      <div class="vote-hero-num" id="est-votes">0票</div>
+      <div class="vote-formula">1世帯2名・70%同一投票行動と仮定</div>
+      <div class="meter-wrap">
+        <div class="meter-bar">
+          <div class="meter-fill" id="meter-fill" style="width:0%">0票</div>
+          <div class="meter-target-lbl" id="meter-target" onclick="editTargetVotes()">目標: 1000票</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ステータス別集計 -->
+    <div class="dash-card">
+      <div class="dash-card-title">📊 ステータス別集計</div>
+      <div class="stat-row"><span class="sr-label">🔴 A（強い支持）</span><span class="sr-value" id="cnt-A">0</span></div>
+      <div class="stat-row"><span class="sr-label">🟠 B+（あと一押し）</span><span class="sr-value" id="cnt-Bplus">0</span></div>
+      <div class="stat-row"><span class="sr-label">🟡 B○（良好）</span><span class="sr-value" id="cnt-Bcir">0</span></div>
+      <div class="stat-row"><span class="sr-label">🟢 B（対面OK）</span><span class="sr-value" id="cnt-B">0</span></div>
+      <div class="stat-row"><span class="sr-label">⚪ B-（塩対応）</span><span class="sr-value" id="cnt-Bmin">0</span></div>
+      <div class="stat-row"><span class="sr-label">🔵 C○（好印象）</span><span class="sr-value" id="cnt-Ccir">0</span></div>
+      <div class="stat-row"><span class="sr-label">🔷 C（インターホン）</span><span class="sr-value" id="cnt-C">0</span></div>
+      <div class="stat-row"><span class="sr-label">⚫ D（他候補）</span><span class="sr-value" id="cnt-D">0</span></div>
+    </div>
+
+    <!-- 活動統計 -->
+    <div class="dash-card">
+      <div class="dash-card-title">📅 活動統計</div>
+      <div class="stat-row">
+        <span class="sr-label">本日の訪問件数</span>
+        <span class="sr-value editable" id="today-count" contenteditable="true" title="タップして編集">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="sr-label">累計訪問件数</span>
+        <span class="sr-value" id="total-count">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="sr-label">再訪対象件数</span>
+        <span class="sr-value" id="revisit-count">0</span>
+      </div>
+    </div>
+
+    <!-- 歩行記録 -->
+    <div class="dash-card">
+      <div class="dash-card-title">🚶 歩行記録</div>
+      <div class="stat-row">
+        <span class="sr-label">本日の歩行距離</span>
+        <span class="sr-value" id="dash-dist">0.0km</span>
+      </div>
+      <div class="stat-row">
+        <span class="sr-label">消費カロリー</span>
+        <span class="sr-value" id="dash-cal">0kcal</span>
+      </div>
+      <div class="stat-row">
+        <span class="sr-label">体重設定</span>
+        <span class="sr-value editable" id="user-weight" contenteditable="true" title="タップして編集">60kg</span>
+      </div>
+    </div>
+
+    <!-- 終了ボタン -->
+    <button class="end-btn" onclick="endSession()">終了してLINEに報告</button>
+
+  </div>
+</div>
+
+<!-- ===== ボトムナビ ===== -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-view="map">
+    <span class="nav-icon">🗺️</span>地図
+  </button>
+  <button class="nav-btn" data-view="record">
+    <span class="nav-icon">✏️</span>記録
+  </button>
+  <button class="nav-btn" data-view="list">
+    <span class="nav-icon">📋</span>一覧
+  </button>
+  <button class="nav-btn" data-view="dashboard">
+    <span class="nav-icon">📊</span>情勢
+  </button>
+</nav>
+
+<!-- ===== トースト ===== -->
+<div id="toast"></div>
+
+<!-- ===== ローディング ===== -->
 <div id="loading">
   <div class="spinner"></div>
   <p>GPSと地図を読み込み中...</p>
 </div>
 
-<!-- ヘッダー -->
-<div id="header">
-  <h1>🏘️ 個別訪問記録</h1>
-  <div id="stats-bar">
-    <div class="stat-item">
-      <span class="stat-value" id="stat-visits">0</span>
-      <span class="stat-label">訪問件数</span>
+<!-- ============================================================
+     位置確認オーバーレイ（Step1: ピンをドラッグして正確な位置を選ぶ）
+     地図の上に重ねる。中央エリアはpointer-events:noneで地図操作可能。
+     ============================================================ -->
+<div id="pos-picker">
+  <!-- 上バー -->
+  <div class="pp-top">
+    <div>
+      <div class="pp-top-title">📍 位置を確認・修正してください</div>
+      <div class="pp-top-hint">緑のピンをドラッグして正確な場所に合わせてください</div>
     </div>
-    <div class="stat-item">
-      <span class="stat-value" id="stat-dist">0m</span>
-      <span class="stat-label">歩行距離</span>
-    </div>
+    <button class="pp-cancel" onclick="closePosPicker()">✕ キャンセル</button>
+  </div>
+
+  <!-- 中央インジケーター（地図の上に浮かぶ。pointer-events:none で地図操作はそのまま通る） -->
+  <div class="pp-center-hint">
+    <div class="pp-crosshair">📍</div>
+    <div class="pp-center-badge">👆 ピンをドラッグして位置を調整</div>
+  </div>
+
+  <!-- 下バー（住所表示 + 確定ボタン） -->
+  <div class="pp-bottom">
+    <div class="pp-addr-label">📍 取得した住所</div>
+    <div class="pp-addr-text loading" id="pp-addr">GPS位置から住所を取得中...</div>
+    <button class="pp-confirm-btn" id="pp-confirm-btn" onclick="confirmPosition()" disabled>
+      ✅ この位置で記録する
+    </button>
   </div>
 </div>
 
-<!-- 地図エリア -->
-<div id="map-wrap">
-  <div id="map"></div>
-  <button id="gps-fab" onclick="centerOnMe()">📍</button>
-</div>
-
-<!-- 下部固定パネル -->
-<div id="bottom-panel">
-  <div class="panel-handle"></div>
-
-  <!-- ======== IDLE ======== -->
-  <div id="panel-idle" class="panel-view active">
-    <p class="idle-hint">訪問先に着いたらタップして記録</p>
-    <button class="idle-btn idle-main" onclick="openFormOverlay()">
-      ＋ 訪問記録を入力
-    </button>
-    <button class="idle-btn idle-sub" onclick="showPanel('history')">
-      📋 本日の記録
-    </button>
-    <button class="idle-btn idle-end" onclick="endSession()">
-      終了
-    </button>
-  </div>
-
-  <!-- ======== FORM（フォーム入力はオーバーレイに移行済み） ======== -->
-  <!-- panel-form は空のまま残す（showPanel の参照エラー防止） -->
-  <div id="panel-form" class="panel-view"></div>
-
-  <!-- ======== HISTORY ======== -->
-  <div id="panel-history" class="panel-view">
-    <div class="history-header">
-      <span class="history-header-title">📋 本日の訪問記録</span>
-      <button class="history-close-btn" onclick="showPanel('idle')">閉じる</button>
-    </div>
-    <div id="history-content"></div>
-  </div>
-
-</div><!-- /bottom-panel -->
-
-<!-- トースト -->
-<div id="toast"></div>
-
-</div><!-- /app -->
-
-<!-- ========================================================
-     フォームオーバーレイ（#appの外 → overflow-y:auto でiOS zoom防止）
-     ======================================================== -->
+<!-- ============================================================
+     フォームオーバーレイ
+     iOS zoom防止のため body 直下に配置（#app外）
+     ============================================================ -->
 <div id="form-overlay">
-  <!-- sticky ヘッダー -->
   <div class="fo-header">
-    <button class="fo-back-btn" onclick="closeFormOverlay()">← キャンセル</button>
-    <span class="fo-header-title">📝 訪問記録を入力</span>
+    <button class="fo-back" onclick="closeForm()">← キャンセル</button>
+    <span class="fo-title">📝 訪問記録を入力</span>
     <div class="fo-spacer"></div>
   </div>
-
-  <!-- フォーム本体 -->
   <div class="fo-body">
 
-    <!-- 住所（フル幅） -->
-    <div class="form-row">
-      <div class="form-cell">
-        <label class="form-label">住所 <span style="color:#E53935">*</span></label>
-        <input type="text" id="f-address" class="form-input" placeholder="GPS取得中..." style="font-size:16px;min-height:56px">
+    <!-- 住所 -->
+    <div class="fg">
+      <label class="fg-label">📍 住所 <span class="req">*</span></label>
+      <input type="text" id="f-address" class="fg-input" placeholder="GPS取得中...">
+    </div>
+
+    <!-- お名前 -->
+    <div class="fg">
+      <label class="fg-label">👤 お名前（任意）</label>
+      <input type="text" id="f-name" class="fg-input" placeholder="田中 太郎">
+    </div>
+
+    <!-- 対応者性別 -->
+    <div class="fg">
+      <label class="fg-label">♂♀ 対応者性別</label>
+      <div class="radio-group" id="gender-group">
+        <button type="button" class="radio-opt" data-v="男性">男性</button>
+        <button type="button" class="radio-opt" data-v="女性">女性</button>
+        <button type="button" class="radio-opt" data-v="不明">不明</button>
       </div>
     </div>
 
-    <!-- お名前（フル幅） -->
-    <div class="form-row">
-      <div class="form-cell">
-        <label class="form-label">お名前</label>
-        <input type="text" id="f-name" class="form-input" placeholder="田中 太郎" style="font-size:16px;min-height:56px">
+    <!-- 対応者年代 -->
+    <div class="fg">
+      <label class="fg-label">🎂 対応者年代</label>
+      <div class="radio-group" id="age-group">
+        <button type="button" class="radio-opt" data-v="10代">10代</button>
+        <button type="button" class="radio-opt" data-v="20代">20代</button>
+        <button type="button" class="radio-opt" data-v="30代">30代</button>
+        <button type="button" class="radio-opt" data-v="40代">40代</button>
+        <button type="button" class="radio-opt" data-v="50代">50代</button>
+        <button type="button" class="radio-opt" data-v="60代">60代</button>
+        <button type="button" class="radio-opt" data-v="70代以上">70代以上</button>
+        <button type="button" class="radio-opt" data-v="不明">不明</button>
       </div>
     </div>
 
-    <!-- 世帯人数（半幅） -->
-    <div class="form-row">
-      <div class="form-cell" style="max-width:55%">
-        <label class="form-label">世帯人数</label>
-        <select id="f-household" class="form-input" style="font-size:16px">
-          <option value="">選択してください</option>
-          <option>1人</option>
-          <option>2人</option>
-          <option>3人</option>
-          <option>4人</option>
-          <option>5人以上</option>
-        </select>
-      </div>
-    </div>
-
-    <!-- 訪問結果 -->
-    <div class="result-section">
-      <label class="form-label">訪問結果 <span style="color:#E53935">*</span></label>
-      <div class="result-grid">
-        <button class="result-btn" onclick="selectResult('在宅')">
-          <span class="em">👋</span>在宅
+    <!-- 支持ステータス -->
+    <div class="fg">
+      <label class="fg-label">⭐ 支持ステータス <span class="req">*</span></label>
+      <div class="status-grid" id="status-group">
+        <button type="button" class="status-opt" data-s="A">
+          <span class="s-icon">🔴</span>A<br><small>強い支持</small>
         </button>
-        <button class="result-btn" onclick="selectResult('不在')">
-          <span class="em">🚪</span>不在
+        <button type="button" class="status-opt" data-s="B+">
+          <span class="s-icon">🟠</span>B+<br><small>あと一押し</small>
         </button>
-        <button class="result-btn" onclick="selectResult('支持')">
-          <span class="em">✅</span>支持
+        <button type="button" class="status-opt" data-s="B○">
+          <span class="s-icon">🟡</span>B○<br><small>良好</small>
         </button>
-        <button class="result-btn" onclick="selectResult('反対')">
-          <span class="em">❌</span>反対
+        <button type="button" class="status-opt" data-s="B">
+          <span class="s-icon">🟢</span>B<br><small>対面OK</small>
         </button>
-        <button class="result-btn" onclick="selectResult('中立')">
-          <span class="em">😐</span>中立
+        <button type="button" class="status-opt" data-s="B-">
+          <span class="s-icon">⚪</span>B-<br><small>塩対応</small>
+        </button>
+        <button type="button" class="status-opt" data-s="C○">
+          <span class="s-icon">🔵</span>C○<br><small>好印象</small>
+        </button>
+        <button type="button" class="status-opt" data-s="C">
+          <span class="s-icon">🔷</span>C<br><small>インターホン</small>
+        </button>
+        <button type="button" class="status-opt" data-s="D">
+          <span class="s-icon">⚫</span>D<br><small>他候補</small>
         </button>
       </div>
     </div>
 
     <!-- メモ -->
-    <div class="form-row">
-      <div class="form-cell">
-        <label class="form-label">メモ・会話内容</label>
-        <textarea id="f-memo" class="form-input" rows="3"
-          placeholder="住民の意見・特記事項など"
-          style="resize:none;font-size:16px"></textarea>
-      </div>
+    <div class="fg">
+      <label class="fg-label">📝 メモ・会話内容</label>
+      <textarea id="f-memo" class="fg-input" rows="3"
+        placeholder="住民の意見・特記事項など"
+        style="resize:none;"></textarea>
     </div>
 
-    <!-- 送信ボタン -->
-    <div style="margin-top:16px">
-      <button id="submit-btn" class="btn btn-success" onclick="submitVisit()"
-        style="width:100%;padding:16px;font-size:16px;border-radius:14px">
-        記録する ✓
-      </button>
+    <!-- 再訪チェック -->
+    <div class="fg">
+      <label class="revisit-label">
+        <input type="checkbox" id="f-revisit">
+        🔄 2週目に再訪する
+      </label>
     </div>
 
-  </div><!-- /fo-body -->
-</div><!-- /form-overlay -->
+    <!-- 保存ボタン -->
+    <button id="save-btn" class="fo-save-btn" onclick="submitVisit()">
+      記録を保存 ✓
+    </button>
 
-<!-- LIFF SDK（LINEアプリ内WebViewでiOS zoomを防ぐため） -->
+  </div>
+</div>
+
+<!-- LIFF SDK -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -517,110 +758,73 @@
 // ============================================================
 // 設定
 // ============================================================
-// ★ LINE DevelopersコンソールでLIFFを登録後、以下に入力してください
-var LIFF_ID  = '2009413587-0Plg0ecV';
-// GAS APIのURL（データ保存・取得用）
-var GAS_URL  = 'https://script.google.com/macros/s/AKfycbxjjLVWPU06BgmwtYrnyjC8LIuV54mzG0YMa_SkWuL5yN8y6m9GEbM_C0cRtX7UlWOM/exec';
+var LIFF_ID = '2009413587-0Plg0ecV';
+var GAS_URL = 'https://script.google.com/macros/s/AKfycbxjjLVWPU06BgmwtYrnyjC8LIuV54mzG0YMa_SkWuL5yN8y6m9GEbM_C0cRtX7UlWOM/exec';
 
-// userId: LIFF経由のときはinitLIFF()で上書きされる
-// 直接URLアクセス時はGASテンプレートのuserIdがフォールバックとして使われる
-// GitHub Pages ホスティング用: userIdはURLパラメータから取得（LIFFで上書き）
-var USER_ID = (function() {
-  var p = new URLSearchParams(window.location.search);
-  return p.get('userId') || '';
-})();
-var DEFAULT_LAT  = 35.4849;
-var DEFAULT_LNG  = 139.4081;
+var DEFAULT_LAT = 35.4849;
+var DEFAULT_LNG = 139.4081;
 
 // ============================================================
 // 状態
 // ============================================================
+var USER_ID = (function() {
+  return new URLSearchParams(window.location.search).get('userId') || '';
+})();
+
 var map;
-var myMarker   = null;
-var myCircle   = null;
-var gpsWatchId = null;
-var currentLat = null;
-var currentLng = null;
-var walkingPath    = [];
-var totalDistance  = 0;
-var visitCount     = 0;
-var sessionVisits  = [];
-var selectedResult = '';
+var currentLat    = null;
+var currentLng    = null;
+var gpsWatchId    = null;
+var isRecording   = false;
+var walkingPath   = [];
+var totalDistance = 0;
+var visitCount    = 0;
 
-var RESULT_EMOJI = { '在宅':'👋','不在':'🚪','支持':'✅','反対':'❌','中立':'😐' };
-var RESULT_COLOR = { '在宅':'#2196F3','不在':'#FF9800','支持':'#43A047','反対':'#E53935','中立':'#9E9E9E' };
+var myMarker      = null;
+var myCircle      = null;
+var pathPolyline  = null;
 
-// ============================================================
-// パネル切替（idle / history のみ。form はオーバーレイで対応）
-// ============================================================
-function showPanel(name) {
-  if (document.activeElement) document.activeElement.blur();
-  document.querySelectorAll('.panel-view').forEach(function(v) {
-    v.classList.remove('active');
-  });
-  var target = document.getElementById('panel-' + name);
-  if (target) target.classList.add('active');
-  if (name === 'history') loadAndShowHistory();
-}
+var allVisits     = [];   // GASから取得した全訪問記録キャッシュ
+var targetVotes   = 1000;
+var userWeight    = 60;   // kg
 
-// ============================================================
-// フォームオーバーレイ（iOS zoom 対策: #app外の overflow-y:auto コンテナ）
-// ============================================================
-function openFormOverlay() {
-  // フォームリセット
-  document.getElementById('f-address').value   = '';
-  document.getElementById('f-name').value      = '';
-  document.getElementById('f-household').value = '';
-  document.getElementById('f-memo').value      = '';
-  selectedResult = '';
-  document.querySelectorAll('.result-btn').forEach(function(b) {
-    b.className = 'result-btn';
-  });
-  var btn = document.getElementById('submit-btn');
-  btn.disabled = false;
-  btn.textContent = '記録する ✓';
+var lastRecordedPos  = null;
+var lastRecordedTime = null;
 
-  // オーバーレイを表示（先頭にスクロール）
-  var overlay = document.getElementById('form-overlay');
-  overlay.scrollTop = 0;
-  overlay.style.display = 'block';
+// 位置確認オーバーレイ用
+var posMarker     = null;  // ドラッグ可能な仮ピン
+var pickedLat     = null;  // 確定した緯度
+var pickedLng     = null;  // 確定した経度
+var pickedAddress = '';    // 確定した住所
+var geocodeTimer  = null;  // dragend後のデバウンス用
 
-  // GPS住所を自動入力
-  if (currentLat !== null) {
-    reverseGeocode(currentLat, currentLng, function(addr) {
-      document.getElementById('f-address').value = addr;
-    });
-  }
-}
-
-function resetViewportZoom() {
-  // iOSズームリセットのコツ:
-  // ① まずblur（キーボード非表示・フォーカス解除）
-  // ② 100ms待機後に initial-scale=1.000001 に変更（変化を検知させる）
-  // ③ さらに300ms待機後に1.0に戻す（ピンチ操作を復活）
-  if (document.activeElement) document.activeElement.blur();
-  var vp = document.querySelector('meta[name=viewport]');
-  if (!vp) return;
-  setTimeout(function() {
-    vp.setAttribute('content', 'width=device-width, initial-scale=1.000001, maximum-scale=1.000001, user-scalable=no');
-    setTimeout(function() {
-      vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
-    }, 300);
-  }, 100);
-}
-
-function closeFormOverlay() {
-  document.getElementById('form-overlay').style.display = 'none';
-  resetViewportZoom();
-}
+// 8段階ステータスの色
+var STATUS_COLORS = {
+  'A':  '#e53935',
+  'B+': '#ff9800',
+  'B○': '#ffd54f',
+  'B':  '#4caf50',
+  'B-': '#9e9e9e',
+  'C○': '#42a5f5',
+  'C':  '#81d4fa',
+  'D':  '#212121'
+};
 
 // ============================================================
 // 初期化
 // ============================================================
 function init() {
   initMap();
+  initNavigation();
+  initFAB();
+  initFormGroups();
+  initEditableFields();
+  setupZoomPrevention();
+  loadTargetVotes();
+  loadUserWeight();
+  loadTodayDistance();
   startGPS();
-  loadVisitHistory();
+  loadVisitHistory();  // GASから履歴を取得
   setTimeout(function() {
     document.getElementById('loading').style.display = 'none';
   }, 1800);
@@ -642,45 +846,123 @@ function initMap() {
 }
 
 // ============================================================
-// GPS追跡
+// ボトムナビ
 // ============================================================
-function startGPS() {
-  if (!navigator.geolocation) {
-    showToast('このブラウザはGPSに対応していません');
-    return;
-  }
-  gpsWatchId = navigator.geolocation.watchPosition(
-    onPosition, onPositionError,
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 4000 }
-  );
+function initNavigation() {
+  document.querySelectorAll('.nav-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var view = btn.dataset.view;
+
+      // アクティブ状態切替
+      document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+
+      // パネル切替
+      document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+
+      var fab = document.getElementById('fab');
+      var distOverlay = document.getElementById('dist-overlay');
+
+      if (view === 'map') {
+        // 地図タブ: パネルを非表示・FAB表示
+        fab.classList.remove('hidden');
+        distOverlay.style.display = 'flex';
+        setTimeout(function() { if (map) map.invalidateSize(); }, 120);
+      } else if (view === 'record') {
+        // 記録タブ: まず位置確認オーバーレイを開く（Step1）
+        fab.classList.add('hidden');
+        distOverlay.style.display = 'none';
+        openPosPicker();
+        // ナビはmapに戻す（オーバーレイを閉じたときのため）
+        document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+        document.querySelector('.nav-btn[data-view="map"]').classList.add('active');
+      } else if (view === 'list') {
+        fab.classList.add('hidden');
+        distOverlay.style.display = 'none';
+        document.getElementById('panel-list').classList.add('active');
+        renderVisitList('all');
+      } else if (view === 'dashboard') {
+        fab.classList.add('hidden');
+        distOverlay.style.display = 'none';
+        document.getElementById('panel-dashboard').classList.add('active');
+        updateDashboard();
+      }
+    });
+  });
 }
 
-function onPosition(pos) {
-  var lat = pos.coords.latitude;
-  var lng = pos.coords.longitude;
-  var acc = pos.coords.accuracy;
-
-  if (acc > 30) return; // 精度30m以上はスキップ
-
-  if (currentLat !== null) {
-    var d = haversine(currentLat, currentLng, lat, lng);
-    if (d >= 3 && d < 500) {
-      totalDistance += d;
-      walkingPath.push([lat, lng]);
-      updateHeader();
+// ============================================================
+// GPS FAB（記録開始/停止）
+// ============================================================
+function initFAB() {
+  document.getElementById('fab').addEventListener('click', function() {
+    if (!isRecording) {
+      startRecording();
+    } else {
+      stopRecording();
     }
-  } else {
-    map.setView([lat, lng], 17);
-    walkingPath.push([lat, lng]);
+  });
+}
+
+function startRecording() {
+  if (!navigator.geolocation) { showToast('このブラウザはGPSに対応していません'); return; }
+  isRecording = true;
+  var fab = document.getElementById('fab');
+  fab.textContent = '⏸️';
+  fab.classList.add('recording');
+  walkingPath    = [];
+  lastRecordedPos  = null;
+  lastRecordedTime = null;
+
+  // 日付が変わっていれば距離をリセット
+  var today = new Date().toDateString();
+  if (localStorage.getItem('lastRecordDate') !== today) {
+    totalDistance = 0;
+    localStorage.setItem('lastRecordDate', today);
+    saveTodayDistance();
   }
 
-  currentLat = lat;
-  currentLng = lng;
+  gpsWatchId = navigator.geolocation.watchPosition(
+    onGPSUpdate, onGPSError,
+    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+  );
+  showToast('GPS記録を開始しました');
+}
 
+function stopRecording() {
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+  }
+  isRecording = false;
+  var fab = document.getElementById('fab');
+  fab.textContent = '▶️';
+  fab.classList.remove('recording');
+
+  if (walkingPath.length > 0) {
+    var km  = (totalDistance / 1000).toFixed(2);
+    var cal = calcCalories(totalDistance);
+    saveTodayDistance();
+    showToast('GPS停止 ' + km + 'km / ' + cal + 'kcal');
+  } else {
+    showToast('GPS記録を停止しました');
+  }
+}
+
+function onGPSUpdate(pos) {
+  var lat  = pos.coords.latitude;
+  var lng  = pos.coords.longitude;
+  var acc  = pos.coords.accuracy;
+  var time = pos.timestamp;
+
+  if (acc > 35) return; // 精度が低すぎる場合スキップ
+
+  // 現在地マーカー更新
   if (myMarker) {
     myMarker.setLatLng([lat, lng]);
     myCircle.setLatLng([lat, lng]).setRadius(acc);
   } else {
+    map.setView([lat, lng], 16);
     myCircle = L.circle([lat, lng], {
       radius: acc, color: '#2196F3',
       fillColor: '#2196F3', fillOpacity: 0.1, weight: 1
@@ -690,289 +972,564 @@ function onPosition(pos) {
       fillColor: '#2196F3', fillOpacity: 1
     }).addTo(map).bindPopup('現在地');
   }
+
+  currentLat = lat;
+  currentLng = lng;
+
+  // 距離計測（徒歩速度のみ）
+  if (lastRecordedPos && lastRecordedTime) {
+    var dist = haversine(lastRecordedPos.lat, lastRecordedPos.lng, lat, lng);
+    var dt   = (time - lastRecordedTime) / 1000; // 秒
+    var spd  = dt > 0 ? (dist / dt) * 3.6 : 0;  // km/h
+
+    if (dist >= 3 && spd <= 7.2) {
+      // 徒歩判定: カウント
+      totalDistance += dist;
+      walkingPath.push([lat, lng]);
+      lastRecordedPos  = { lat: lat, lng: lng };
+      lastRecordedTime = time;
+      saveTodayDistance();
+      updateDistOverlay();
+      drawPath();
+    } else if (dist >= 3) {
+      // 乗り物判定: 位置だけ更新
+      lastRecordedPos  = { lat: lat, lng: lng };
+      lastRecordedTime = time;
+    }
+  } else {
+    walkingPath.push([lat, lng]);
+    lastRecordedPos  = { lat: lat, lng: lng };
+    lastRecordedTime = time;
+  }
 }
 
-function onPositionError(err) {
+function onGPSError(err) {
   if (err.code === 1) {
-    showToast('位置情報の許可が必要です。ブラウザ設定を確認してください。');
+    showToast('位置情報の許可が必要です');
   } else {
-    showToast('GPS取得エラー。屋外に出てお試しください。');
+    showToast('GPS取得エラー。屋外でお試しください。');
   }
 }
 
-function centerOnMe() {
-  if (currentLat !== null) {
-    map.setView([currentLat, currentLng], 17);
-  } else {
-    showToast('GPS取得中です。少し待ってください...');
-  }
+function drawPath() {
+  if (walkingPath.length < 2) return;
+  if (pathPolyline) map.removeLayer(pathPolyline);
+  pathPolyline = L.polyline(walkingPath, {
+    color: '#2196F3', weight: 4, opacity: 0.9
+  }).addTo(map);
 }
 
 // ============================================================
-// 過去の訪問履歴をマップに表示
+// GASから訪問履歴をロード（マーカー表示・キャッシュ）
 // ============================================================
 function loadVisitHistory() {
   gasAPI({ action: 'getVisitHistory', userId: USER_ID })
     .then(function(res) {
       if (res && res.records) {
-        res.records.forEach(addMarker);
+        allVisits = res.records;
+        res.records.forEach(addMapMarker);
+        updateDashboard();
       }
     })
     .catch(function(e) { console.error('loadVisitHistory:', e); });
 }
 
-function addMarker(v) {
+// ============================================================
+// 地図にマーカーを追加
+// ============================================================
+function addMapMarker(v) {
   if (!v.lat || !v.lng) return;
-  var color = RESULT_COLOR[v.result] || '#9E9E9E';
-  var icon  = L.divIcon({
-    html: '<div style="width:13px;height:13px;background:' + color + ';border:2.5px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
-    iconSize: [13,13], iconAnchor: [6,6], className: ''
+  var status = v.status || v.result || '';
+  var color  = STATUS_COLORS[status] || '#9E9E9E';
+
+  var icon = L.divIcon({
+    html: '<div style="width:16px;height:16px;background:' + color
+          + ';border:2.5px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.3)"></div>',
+    iconSize: [16,16], iconAnchor: [8,8], className: ''
   });
-  var popup = '<div style="font-size:13px;min-width:140px">'
-    + '<strong>' + (RESULT_EMOJI[v.result]||'📍') + ' ' + (v.result||'未記録') + '</strong><br>'
-    + (v.address||'') + '<br>'
-    + (v.residentName ? '👤 ' + v.residentName : '')
-    + (v.memo ? '<br>📝 ' + v.memo.slice(0,50) : '')
+
+  var popup = '<div style="font-size:13px;min-width:150px;line-height:1.6">'
+    + '<strong>' + status + '</strong>'
+    + (v.residentName ? ' — ' + v.residentName + 'さん' : '') + '<br>'
+    + '<span style="color:#666">' + (v.address || '') + '</span>'
+    + (v.gender ? '<br>' + v.gender + ' / ' + (v.age || '') : '')
+    + (v.memo ? '<br>📝 ' + String(v.memo).slice(0,50) : '')
+    + (v.revisit ? '<br>🔄 再訪対象' : '')
     + '</div>';
-  L.marker([v.lat, v.lng], { icon: icon })
+
+  L.marker([parseFloat(v.lat), parseFloat(v.lng)], { icon: icon })
     .addTo(map)
     .bindPopup(popup);
 }
 
 // ============================================================
-// 訪問結果選択
+// 位置確認オーバーレイ（Step1: ドラッグで位置修正）
 // ============================================================
-function selectResult(r) {
-  selectedResult = r;
-  document.querySelectorAll('.result-btn').forEach(function(b) {
-    b.className = 'result-btn';
-    if (b.textContent.includes(r)) b.classList.add('sel-' + r);
+function openPosPicker() {
+  // ① form-overlay が残っていれば必ず閉じる（安全策）
+  document.getElementById('form-overlay').style.display = 'none';
+
+  // ② pos-picker オーバーレイを最初に表示（住所取得の成否に関わらず必ず表示）
+  var addrEl    = document.getElementById('pp-addr');
+  var confirmBtn = document.getElementById('pp-confirm-btn');
+  addrEl.textContent = 'GPS位置から住所を取得中...';
+  addrEl.classList.add('loading');
+  confirmBtn.disabled = true;
+  document.getElementById('pos-picker').classList.add('active');
+
+  // ② 地図サイズを更新
+  setTimeout(function() { if (map) map.invalidateSize(); }, 100);
+
+  // ③ 仮ピンの初期位置（現在地 or デフォルト）
+  var lat = currentLat !== null ? currentLat : DEFAULT_LAT;
+  var lng = currentLng !== null ? currentLng : DEFAULT_LNG;
+
+  // ④ 既存の仮ピンを削除
+  if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
+
+  // ⑤ ドラッグ可能なピンを地図に追加
+  posMarker = L.marker([lat, lng], {
+    draggable: true,
+    autoPan: true,
+    icon: L.divIcon({
+      html: '<div style="'
+          + 'width:36px;height:36px;'
+          + 'background:#06C755;'
+          + 'border:3px solid white;'
+          + 'border-radius:50% 50% 50% 0;'
+          + 'transform:rotate(-45deg);'
+          + 'box-shadow:0 3px 10px rgba(0,0,0,0.35);'
+          + '"></div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      className: ''
+    })
+  }).addTo(map);
+
+  // ⑥ 地図をピン位置にズーム
+  map.setView([lat, lng], Math.max(map.getZoom(), 17));
+
+  // ⑦ 初期位置の住所を取得
+  fetchAddressForPin(lat, lng);
+
+  // ⑧ ドラッグ中: 「取得中...」表示
+  posMarker.on('dragstart', function() {
+    clearTimeout(geocodeTimer);
+    addrEl.textContent = '🔄 住所を取得中...';
+    addrEl.classList.add('loading');
+    confirmBtn.disabled = true;
+  });
+
+  // ⑨ ドラッグ終了: 新しい位置の住所を取得（300msデバウンス）
+  posMarker.on('dragend', function(e) {
+    var pos = e.target.getLatLng();
+    clearTimeout(geocodeTimer);
+    geocodeTimer = setTimeout(function() {
+      fetchAddressForPin(pos.lat, pos.lng);
+    }, 300);
+  });
+}
+
+function fetchAddressForPin(lat, lng) {
+  var addrEl    = document.getElementById('pp-addr');
+  var confirmBtn = document.getElementById('pp-confirm-btn');
+
+  // 座標を先に確定（住所取得に失敗しても位置は保持）
+  pickedLat = lat;
+  pickedLng = lng;
+
+  try {
+    reverseGeocodeDetailed(lat, lng, function(addr) {
+      pickedAddress = addr || (lat.toFixed(6) + ', ' + lng.toFixed(6));
+      addrEl.textContent = pickedAddress;
+      addrEl.classList.remove('loading');
+      confirmBtn.disabled = false;
+    });
+  } catch(e) {
+    // reverseGeocodeDetailed が何らかの理由で失敗しても座標で続行
+    pickedAddress = lat.toFixed(6) + ', ' + lng.toFixed(6);
+    addrEl.textContent = pickedAddress;
+    addrEl.classList.remove('loading');
+    confirmBtn.disabled = false;
+  }
+}
+
+function closePosPicker() {
+  // 仮ピンを削除
+  if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
+  document.getElementById('pos-picker').classList.remove('active');
+
+  // FAB・オーバーレイを元に戻す
+  document.getElementById('fab').classList.remove('hidden');
+  document.getElementById('dist-overlay').style.display = 'flex';
+  setTimeout(function() { if (map) map.invalidateSize(); }, 120);
+}
+
+function confirmPosition() {
+  // 仮ピンを削除してStep2（フォーム）へ
+  if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
+  document.getElementById('pos-picker').classList.remove('active');
+
+  // 確定した位置情報をcurrentLat/Lngに上書き
+  if (pickedLat !== null) {
+    currentLat = pickedLat;
+    currentLng = pickedLng;
+  }
+
+  // フォームを開く（住所は確定済みのものを渡す）
+  openForm(pickedAddress);
+}
+
+// ============================================================
+// フォームオーバーレイ（Step2: 情報入力）
+// ============================================================
+function openForm(prefilledAddress) {
+  // フォームリセット
+  document.getElementById('f-address').value = '';
+  document.getElementById('f-name').value    = '';
+  document.getElementById('f-memo').value    = '';
+  document.getElementById('f-revisit').checked = false;
+  document.querySelectorAll('.radio-opt').forEach(function(b) { b.classList.remove('sel'); });
+  document.querySelectorAll('.status-opt').forEach(function(b) { b.classList.remove('sel'); });
+  var btn = document.getElementById('save-btn');
+  btn.disabled = false; btn.textContent = '記録を保存 ✓';
+
+  var overlay = document.getElementById('form-overlay');
+  overlay.scrollTop = 0;
+  overlay.style.display = 'block';
+
+  // 住所をセット:
+  //   Step1（位置確認）から来た場合 → prefilledAddress を使う（再ジオコードしない）
+  //   直接フォームを開いた場合      → GPSから詳細住所を取得
+  if (prefilledAddress) {
+    document.getElementById('f-address').value = prefilledAddress;
+  } else if (currentLat !== null) {
+    document.getElementById('f-address').value = '住所を取得中...';
+    reverseGeocodeDetailed(currentLat, currentLng, function(addr) {
+      document.getElementById('f-address').value = addr;
+    });
+  }
+}
+
+function closeForm() {
+  document.getElementById('form-overlay').style.display = 'none';
+  resetViewportZoom();
+  // 地図タブに戻す
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelector('.nav-btn[data-view="map"]').classList.add('active');
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+  document.getElementById('fab').classList.remove('hidden');
+  document.getElementById('dist-overlay').style.display = 'flex';
+  setTimeout(function() { if (map) map.invalidateSize(); }, 120);
+}
+
+// ============================================================
+// ラジオ・ステータスグループ初期化
+// ============================================================
+function initFormGroups() {
+  ['gender-group', 'age-group'].forEach(function(groupId) {
+    document.getElementById(groupId).querySelectorAll('.radio-opt').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.getElementById(groupId).querySelectorAll('.radio-opt')
+          .forEach(function(b) { b.classList.remove('sel'); });
+        btn.classList.add('sel');
+      });
+    });
+  });
+
+  document.getElementById('status-group').querySelectorAll('.status-opt').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.getElementById('status-group').querySelectorAll('.status-opt')
+        .forEach(function(b) { b.classList.remove('sel'); });
+      btn.classList.add('sel');
+    });
   });
 }
 
 // ============================================================
-// ============================================================
-// GAS API 共通呼び出し（fetch + GETパラメータ）
-// GASのContentServiceはCORS(Access-Control-Allow-Origin:*)を自動付与する
-// ============================================================
-function gasAPI(params) {
-  var qs = Object.keys(params).map(function(k) {
-    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-  }).join('&');
-  return fetch(GAS_URL + '?' + qs)
-    .then(function(r) { return r.json(); });
-}
-
-// 訪問記録保存
+// 訪問記録を保存（GAS送信）
 // ============================================================
 function submitVisit() {
-  var address   = document.getElementById('f-address').value.trim();
-  var name      = document.getElementById('f-name').value.trim();
-  var household = document.getElementById('f-household').value;
-  var memo      = document.getElementById('f-memo').value.trim();
+  var address = document.getElementById('f-address').value.trim();
+  var name    = document.getElementById('f-name').value.trim();
+  var memo    = document.getElementById('f-memo').value.trim();
+  var revisit = document.getElementById('f-revisit').checked;
 
-  if (!address)        { showToast('住所を入力してください'); return; }
-  if (!selectedResult) { showToast('訪問結果を選択してください'); return; }
+  var genderEl = document.querySelector('#gender-group .radio-opt.sel');
+  var ageEl    = document.querySelector('#age-group .radio-opt.sel');
+  var statusEl = document.querySelector('#status-group .status-opt.sel');
+
+  var gender = genderEl ? genderEl.dataset.v : '';
+  var age    = ageEl    ? ageEl.dataset.v    : '';
+  var status = statusEl ? statusEl.dataset.s : '';
+
+  if (!address) { showToast('住所を入力してください'); return; }
+  if (!status)  { showToast('ステータスを選択してください'); return; }
 
   var data = {
+    action:          'saveVisit',
     address:         address,
-    lat:             currentLat || '',
-    lng:             currentLng || '',
+    lat:             currentLat  || '',
+    lng:             currentLng  || '',
     residentName:    name,
-    householdSize:   household,
-    result:          selectedResult,
+    gender:          gender,
+    age:             age,
+    status:          status,
     memo:            memo,
+    revisit:         revisit ? '1' : '0',
     walkingDistance: Math.round(totalDistance),
     userId:          USER_ID
   };
 
-  var btn = document.getElementById('submit-btn');
-  btn.disabled = true;
-  btn.textContent = '保存中...';
+  var btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = '保存中...';
 
-  var params = { action: 'saveVisit' };
-  Object.keys(data).forEach(function(k) { params[k] = data[k]; });
-
-  gasAPI(params)
+  gasAPI(data)
     .then(function(res) {
-      btn.disabled = false;
-      btn.textContent = '記録する ✓';
-      if (res.success) {
+      btn.disabled = false; btn.textContent = '記録を保存 ✓';
+      if (res && res.success) {
         visitCount++;
-        sessionVisits.push(data);
-        updateHeader();
-        addMarker({
+        // キャッシュに追加してマーカー描画
+        var newVisit = {
           lat: data.lat, lng: data.lng,
-          address: data.address,
-          residentName: data.residentName,
-          result: data.result, memo: data.memo
-        });
+          address: data.address, residentName: data.residentName,
+          gender: data.gender, age: data.age,
+          status: data.status, memo: data.memo,
+          revisit: revisit,
+          date: new Date().toISOString()
+        };
+        allVisits.push(newVisit);
+        addMapMarker(newVisit);
+        updateDistOverlay();
+        updateDashboard();
         showToast('✅ 訪問記録を保存しました！');
-        closeFormOverlay();
+        closeForm();
       } else {
-        showToast('保存エラー: ' + (res.error || '不明'));
+        showToast('保存エラー: ' + (res && res.error ? res.error : '不明'));
       }
     })
-    .catch(function(e) {
-      btn.disabled = false;
-      btn.textContent = '記録する ✓';
+    .catch(function() {
+      btn.disabled = false; btn.textContent = '記録を保存 ✓';
       showToast('通信エラーが発生しました');
-      console.error(e);
     });
 }
 
 // ============================================================
-// 本日の記録表示
+// 訪問リスト描画
 // ============================================================
-function loadAndShowHistory() {
-  var container = document.getElementById('history-content');
-  container.innerHTML = '<p style="color:#aaa;text-align:center;padding:20px 0">読み込み中...</p>';
+var currentFilter = 'all';
 
-  gasAPI({ action: 'getTodayVisits', userId: USER_ID })
-    .then(function(res) {
-      renderHistory(res && res.records ? res.records : []);
-    })
-    .catch(function(e) {
-      console.error('getTodayVisits error:', e);
-      renderHistory(sessionVisits);
-    });
+// フィルターバーのイベントは DOMContentLoaded 後にセット
+document.querySelectorAll('.filter-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    if (currentFilter === 'period') {
+      document.getElementById('period-row').classList.add('show');
+    } else {
+      document.getElementById('period-row').classList.remove('show');
+      renderVisitList(currentFilter);
+    }
+  });
+});
+
+function applyPeriodFilter() {
+  var s = document.getElementById('start-date').value;
+  var e = document.getElementById('end-date').value;
+  if (!s || !e) { showToast('開始日と終了日を選択してください'); return; }
+  renderVisitList('period', { startDate: s, endDate: e });
 }
 
-function renderHistory(records) {
-  var container = document.getElementById('history-content');
-  if (!records || records.length === 0) {
-    container.innerHTML = '<p style="color:#aaa;text-align:center;padding:20px 0">本日の記録はまだありません</p>';
+function renderVisitList(filter, opts) {
+  var list = document.getElementById('visit-list');
+  var items = allVisits.slice();
+
+  if (filter === 'today') {
+    var today = new Date().toDateString();
+    items = items.filter(function(v) { return new Date(v.date || v.timestamp).toDateString() === today; });
+  } else if (filter === 'revisit') {
+    items = items.filter(function(v) { return v.revisit == '1' || v.revisit === true; });
+  } else if (filter === 'period' && opts) {
+    var s = new Date(opts.startDate);
+    var e = new Date(opts.endDate); e.setHours(23,59,59,999);
+    items = items.filter(function(v) {
+      var d = new Date(v.date || v.timestamp);
+      return d >= s && d <= e;
+    });
+  }
+
+  if (items.length === 0) {
+    list.innerHTML = '<p style="text-align:center;color:#aaa;padding:40px 0">訪問記録がありません</p>';
     return;
   }
 
-  var stats = { '支持':0,'反対':0,'在宅':0,'不在':0,'中立':0 };
-  records.forEach(function(v) {
-    if (stats.hasOwnProperty(v.result)) stats[v.result]++;
-  });
-
-  var html = '<div class="stats-grid">';
-  Object.keys(stats).forEach(function(k) {
-    html += '<div class="stats-card">'
-      + '<div class="sc-em">' + RESULT_EMOJI[k] + '</div>'
-      + '<div class="sc-num">' + stats[k] + '</div>'
-      + '<div class="sc-lbl">' + k + '</div>'
-      + '</div>';
-  });
-  html += '</div><div>';
-
-  records.slice().reverse().forEach(function(v) {
-    html += '<div class="hist-item">'
-      + '<div class="hist-row1">'
-      + '<span class="hist-result-em">' + (RESULT_EMOJI[v.result]||'📍') + '</span>'
-      + '<span class="hist-result-lbl">' + v.result + '</span>'
-      + (v.residentName ? '<span class="hist-name">' + v.residentName + 'さん</span>' : '')
+  list.innerHTML = items.slice().reverse().map(function(v) {
+    var status = v.status || v.result || '';
+    var color  = STATUS_COLORS[status] || '#9E9E9E';
+    var dt = v.date || v.timestamp || '';
+    var dtStr = dt ? new Date(dt).toLocaleString('ja-JP') : '';
+    return '<div class="visit-item">'
+      + '<div class="visit-item-header">'
+      + '<span class="visit-date">' + dtStr + '</span>'
+      + '<span class="status-badge" style="background:' + color + '">' + status + '</span>'
       + '</div>'
-      + '<div class="hist-addr">📍 ' + (v.address||'GPS未取得') + '</div>'
-      + (v.memo ? '<div class="hist-memo">📝 ' + v.memo.slice(0,60) + '</div>' : '')
+      + '<div class="visit-address">' + (v.address || 'GPS未取得') + '</div>'
+      + '<div class="visit-meta">'
+      + (v.residentName ? '👤 ' + v.residentName + 'さん　' : '')
+      + (v.gender ? v.gender : '') + (v.age ? ' / ' + v.age : '')
+      + (v.memo ? '<br>📝 ' + String(v.memo).slice(0,60) : '')
+      + ((v.revisit == '1' || v.revisit === true) ? '<br>🔄 再訪対象' : '')
+      + '</div>'
       + '</div>';
+  }).join('');
+}
+
+// ============================================================
+// ダッシュボード更新
+// ============================================================
+function updateDashboard() {
+  var counts = { 'A':0,'B+':0,'B○':0,'B':0,'B-':0,'C○':0,'C':0,'D':0 };
+
+  allVisits.forEach(function(v) {
+    var s = v.status || v.result || '';
+    if (counts[s] !== undefined) counts[s]++;
   });
-  html += '</div>';
-  container.innerHTML = html;
+
+  document.getElementById('cnt-A').textContent    = counts['A'];
+  document.getElementById('cnt-Bplus').textContent = counts['B+'];
+  document.getElementById('cnt-Bcir').textContent  = counts['B○'];
+  document.getElementById('cnt-B').textContent     = counts['B'];
+  document.getElementById('cnt-Bmin').textContent  = counts['B-'];
+  document.getElementById('cnt-Ccir').textContent  = counts['C○'];
+  document.getElementById('cnt-C').textContent     = counts['C'];
+  document.getElementById('cnt-D').textContent     = counts['D'];
+
+  // 見込み票数（B+以上×2×0.7）
+  var bplusAbove  = counts['A'] + counts['B+'];
+  var estVotes    = Math.round(bplusAbove * 2 * 0.7);
+  var progress    = Math.min((estVotes / targetVotes) * 100, 100);
+  document.getElementById('est-votes').textContent         = estVotes + '票';
+  document.getElementById('meter-fill').style.width        = progress + '%';
+  document.getElementById('meter-fill').textContent        = estVotes + '票';
+  document.getElementById('meter-target').textContent      = '目標: ' + targetVotes + '票';
+
+  // 活動統計
+  var today = new Date().toDateString();
+  var todayVis = allVisits.filter(function(v) {
+    return new Date(v.date || v.timestamp).toDateString() === today;
+  });
+  var manualCount = localStorage.getItem('manualTodayCount');
+  var todayCnt = manualCount !== null ? parseInt(manualCount) : todayVis.length;
+  document.getElementById('today-count').textContent  = todayCnt;
+  document.getElementById('total-count').textContent  = allVisits.length;
+  document.getElementById('revisit-count').textContent = allVisits.filter(function(v) {
+    return v.revisit == '1' || v.revisit === true;
+  }).length;
+
+  // 歩行記録
+  var km  = (totalDistance / 1000).toFixed(2);
+  var cal = calcCalories(totalDistance);
+  document.getElementById('dash-dist').textContent = km + 'km';
+  document.getElementById('dash-cal').textContent  = cal + 'kcal';
+  document.getElementById('user-weight').textContent = userWeight + 'kg';
+}
+
+// ============================================================
+// 右上オーバーレイ更新
+// ============================================================
+function updateDistOverlay() {
+  document.getElementById('dist-val').textContent  = formatDist(totalDistance);
+  document.getElementById('visit-val').textContent = visitCount + '件';
+}
+
+// ============================================================
+// 目標票数を編集
+// ============================================================
+function editTargetVotes() {
+  var cur = targetVotes;
+  var input = prompt('目標票数を入力してください', cur);
+  if (input === null) return;
+  var n = parseInt(input);
+  if (!isNaN(n) && n > 0) {
+    targetVotes = n;
+    localStorage.setItem('targetVotes', n);
+    updateDashboard();
+    showToast('目標票数を ' + n + ' 票に設定しました');
+  }
+}
+
+// ============================================================
+// 編集可能フィールド（今日の訪問件数・体重）
+// ============================================================
+function initEditableFields() {
+  var todayEl = document.getElementById('today-count');
+  todayEl.addEventListener('blur', function() {
+    var n = parseInt(this.textContent) || 0;
+    localStorage.setItem('manualTodayCount', n);
+    showToast('本日の訪問件数を更新しました');
+  });
+  todayEl.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+    if (!/[0-9]/.test(e.key)) e.preventDefault();
+  });
+
+  var wEl = document.getElementById('user-weight');
+  wEl.addEventListener('blur', function() {
+    var n = parseInt(this.textContent.replace(/[^0-9]/g,'')) || 60;
+    userWeight = n;
+    localStorage.setItem('userWeight', n);
+    this.textContent = n + 'kg';
+    updateDashboard();
+    showToast('体重を更新しました');
+  });
+  wEl.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+    if (!/[0-9]/.test(e.key)) e.preventDefault();
+  });
 }
 
 // ============================================================
 // セッション終了
 // ============================================================
 function endSession() {
-  var distStr = formatDist(totalDistance);
+  var km  = (totalDistance / 1000).toFixed(2);
   var msg = visitCount > 0
-    ? '本日の訪問: ' + visitCount + '件\n歩行距離: ' + distStr + '\n\n終了してLINEに報告しますか？'
+    ? '本日の訪問: ' + visitCount + '件\n歩行距離: ' + km + 'km\n\nLINEに報告しますか？'
     : '訪問記録がありません。終了しますか？';
 
   if (!confirm(msg)) return;
 
-  if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
-
-  if (visitCount === 0 || !USER_ID) {
-    showToast('お疲れ様でした！');
-    return;
+  if (gpsWatchId !== null) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+    isRecording = false;
+    document.getElementById('fab').textContent = '▶️';
+    document.getElementById('fab').classList.remove('recording');
   }
 
-  var stats = { '支持':0,'反対':0,'在宅':0,'不在':0,'中立':0 };
-  sessionVisits.forEach(function(v) {
-    if (stats.hasOwnProperty(v.result)) stats[v.result]++;
+  if (visitCount === 0 || !USER_ID) { showToast('お疲れ様でした！'); return; }
+
+  var counts = { '支持':0,'反対':0,'在宅':0,'不在':0,'中立':0 };
+  allVisits.forEach(function(v) {
+    if (counts[v.result]) counts[v.result]++;
   });
 
-  var reportData = { totalVisits: visitCount, totalDistance: totalDistance };
-  Object.keys(stats).forEach(function(k) { reportData[k] = stats[k]; });
-
-  var params = { action: 'sendReport', userId: USER_ID };
-  Object.keys(reportData).forEach(function(k) { params[k] = reportData[k]; });
+  var params = { action: 'sendReport', userId: USER_ID,
+                 totalVisits: visitCount, totalDistance: totalDistance };
   gasAPI(params)
     .then(function() { showToast('✅ LINEに報告しました！'); })
-    .catch(function() { showToast('LINE報告に失敗しましたが、記録は保存されています'); });
+    .catch(function() { showToast('LINE報告に失敗しましたが記録は保存されています'); });
 }
 
 // ============================================================
-// 入力タップ時ズーム防止（iOS 15+ 対応）
-// ・iOSは静的HTMLの maximum-scale=1.0 を無視するが
-//   touchstart の瞬間に JS で書き換えると効く
-// ・blur 後は maximum-scale を戻してピンチ操作を復活
+// GAS API共通呼び出し
 // ============================================================
-function setupZoomPrevention() {
-  var viewport = document.querySelector('meta[name=viewport]');
-  if (!viewport) return;
-
-  var VP_LOCK   = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
-  var VP_NORMAL = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
-
-  // 入力欄タッチ開始 → ズームをロック（focusより先に発火するのがポイント）
-  document.addEventListener('touchstart', function(e) {
-    var tag = e.target.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-      viewport.setAttribute('content', VP_LOCK);
-    }
-  }, { passive: true });
-
-  // フォーカスが外れた → ズームを解除（ピンチ操作を復活）
-  document.addEventListener('focusout', function(e) {
-    var tag = e.target.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-      setTimeout(function() {
-        viewport.setAttribute('content', VP_NORMAL);
-      }, 150);
-    }
-  });
-}
-
-// ============================================================
-// キーボード対策（Visual Viewport API）
-// ============================================================
-function setupKeyboardFix() {
-  if (!window.visualViewport) return;
-
-  function onVVChange() {
-    var formView = document.getElementById('panel-form');
-    if (!formView.classList.contains('active')) return;
-
-    var kbH = Math.max(0,
-      window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop
-    );
-
-    var panel = document.getElementById('bottom-panel');
-    if (kbH > 80) {
-      // キーボード表示中: パネルをキーボードの上に移動
-      panel.style.marginBottom = kbH + 'px';
-    } else {
-      panel.style.marginBottom = '';
-    }
-
-    // フォーカス中の要素をスクロールで表示
-    var focused = document.activeElement;
-    if (focused && formView.contains(focused)) {
-      setTimeout(function() {
-        focused.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }, 100);
-    }
-  }
-
-  window.visualViewport.addEventListener('resize', onVVChange);
-  window.visualViewport.addEventListener('scroll', onVVChange);
+function gasAPI(params) {
+  var qs = Object.keys(params).map(function(k) {
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+  }).join('&');
+  return fetch(GAS_URL + '?' + qs).then(function(r) { return r.json(); });
 }
 
 // ============================================================
@@ -983,26 +1540,66 @@ function haversine(lat1, lng1, lat2, lng2) {
   var dLat = (lat2 - lat1) * Math.PI / 180;
   var dLng = (lng2 - lng1) * Math.PI / 180;
   var a = Math.sin(dLat/2) * Math.sin(dLat/2)
-        + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+        + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180)
         * Math.sin(dLng/2) * Math.sin(dLng/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function reverseGeocode(lat, lng, callback) {
-  var url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json&accept-language=ja';
-  fetch(url)
+function reverseGeocode(lat, lng, cb) {
+  fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat
+      + '&lon=' + lng + '&format=json&accept-language=ja',
+    { headers: { 'User-Agent': 'CanvassingApp/1.0' } }
+  )
     .then(function(r) { return r.json(); })
     .then(function(d) {
       var a = d.address || {};
-      var result = '';
-      if (a.city_district || a.suburb) result += (a.city_district || a.suburb);
-      if (a.neighbourhood)  result += a.neighbourhood;
-      if (a.road)           result += a.road;
-      if (a.house_number)   result += a.house_number;
-      callback(result || d.display_name || (lat.toFixed(5) + ', ' + lng.toFixed(5)));
+      var result = (a.city_district || a.suburb || '')
+                 + (a.neighbourhood || '')
+                 + (a.road || '')
+                 + (a.house_number || '');
+      cb(result || d.display_name || lat.toFixed(5) + ', ' + lng.toFixed(5));
+    })
+    .catch(function() { cb(lat.toFixed(5) + ', ' + lng.toFixed(5)); });
+}
+
+// 大字・丁目・番地・枝番まで含む詳細住所取得（位置確認ピン用）
+function reverseGeocodeDetailed(lat, lng, cb) {
+  fetch(
+    'https://nominatim.openstreetmap.org/reverse?lat=' + lat
+    + '&lon=' + lng
+    + '&format=json&addressdetails=1&accept-language=ja&zoom=18',
+    { headers: { 'User-Agent': 'CanvassingApp/1.0' } }
+  )
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var a = d.address || {};
+
+      // 日本語住所の組み立て（都道府県 → 市区町村 → 大字/地区 → 丁目 → 番地 → 号）
+      var pref   = a.state          || '';          // 神奈川県
+      var city   = a.city || a.town || a.village || a.county || ''; // 座間市
+      var ward   = a.city_district  || '';          // 区（政令市）
+      var oaza   = a.suburb || a.hamlet || '';      // 大字・地区名
+      var chome  = a.quarter || a.neighbourhood || ''; // 丁目・字
+      var road   = a.road           || '';          // 番地相当（Nominatim では road に入ることが多い）
+      var num    = a.house_number   || '';          // 号・枝番
+
+      var addr = pref + city + ward + oaza + chome + road + num;
+
+      // フォールバック: 組み立てできなければ display_name の後半部分、それもなければ座標
+      if (!addr) {
+        if (d.display_name) {
+          // display_name は "番地, 大字, 市, 県, 郵便番号, 国" の順なので先頭3〜4要素を逆順に
+          var parts = d.display_name.split(', ');
+          addr = parts.slice(0, Math.min(4, parts.length)).reverse().join('');
+        } else {
+          addr = lat.toFixed(6) + ', ' + lng.toFixed(6);
+        }
+      }
+      cb(addr);
     })
     .catch(function() {
-      callback(lat.toFixed(5) + ', ' + lng.toFixed(5));
+      // ネットワークエラー時は座標を返す
+      cb(lat.toFixed(6) + ', ' + lng.toFixed(6));
     });
 }
 
@@ -1011,60 +1608,125 @@ function formatDist(m) {
   return (m / 1000).toFixed(1) + 'km';
 }
 
-function updateHeader() {
-  document.getElementById('stat-visits').textContent = visitCount;
-  document.getElementById('stat-dist').textContent   = formatDist(totalDistance);
+function calcCalories(distM) {
+  return Math.round((distM / 1000) * userWeight * 0.5);
+}
+
+function saveTodayDistance() {
+  localStorage.setItem('todayDistance',  totalDistance);
+  localStorage.setItem('lastRecordDate', new Date().toDateString());
+}
+
+function loadTodayDistance() {
+  var today = new Date().toDateString();
+  if (localStorage.getItem('lastRecordDate') === today) {
+    totalDistance = parseFloat(localStorage.getItem('todayDistance') || '0');
+  } else {
+    totalDistance = 0;
+    saveTodayDistance();
+  }
+  updateDistOverlay();
+}
+
+function loadTargetVotes() {
+  targetVotes = parseInt(localStorage.getItem('targetVotes') || '1000');
+}
+
+function loadUserWeight() {
+  userWeight = parseInt(localStorage.getItem('userWeight') || '60');
 }
 
 function showToast(msg) {
   var t = document.getElementById('toast');
   t.textContent = msg;
   t.style.display = 'block';
-  clearTimeout(t._timer);
-  t._timer = setTimeout(function() { t.style.display = 'none'; }, 3000);
+  clearTimeout(t._t);
+  t._t = setTimeout(function() { t.style.display = 'none'; }, 3000);
 }
 
 // ============================================================
-// 起動
+// iOS zoom防止（静的HTMLのmaximum-scale=1.0を無視するブラウザ対策）
 // ============================================================
+function setupZoomPrevention() {
+  var vp = document.querySelector('meta[name=viewport]');
+  if (!vp) return;
+  var LOCK   = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+  var NORMAL = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
+  document.addEventListener('touchstart', function(e) {
+    var tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT')
+      vp.setAttribute('content', LOCK);
+  }, { passive: true });
+  document.addEventListener('focusout', function(e) {
+    var tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT')
+      setTimeout(function() { vp.setAttribute('content', NORMAL); }, 150);
+  });
+}
+
+function resetViewportZoom() {
+  var vp = document.querySelector('meta[name=viewport]');
+  if (!vp) return;
+  if (document.activeElement) document.activeElement.blur();
+  setTimeout(function() {
+    vp.setAttribute('content', 'width=device-width, initial-scale=1.000001, maximum-scale=1.000001, user-scalable=no');
+    setTimeout(function() {
+      vp.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
+    }, 300);
+  }, 100);
+}
+
 // ============================================================
-// LIFF初期化（LINEアプリ内で開いたときにuserIdをLIFFから取得）
+// 起動時GPS（常時位置更新 for 地図センタリング）
+// ============================================================
+function startGPS() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    currentLat = pos.coords.latitude;
+    currentLng = pos.coords.longitude;
+    map.setView([currentLat, currentLng], 16);
+
+    if (!myMarker) {
+      myCircle = L.circle([currentLat, currentLng], {
+        radius: pos.coords.accuracy, color: '#2196F3',
+        fillColor: '#2196F3', fillOpacity: 0.1, weight: 1
+      }).addTo(map);
+      myMarker = L.circleMarker([currentLat, currentLng], {
+        radius: 9, color: 'white', weight: 3,
+        fillColor: '#2196F3', fillOpacity: 1
+      }).addTo(map).bindPopup('現在地');
+    }
+  }, function() {}, { enableHighAccuracy: true });
+}
+
+// ============================================================
+// LIFF初期化（LINEアプリ内でuserIdを取得）
 // ============================================================
 function initLIFF() {
-  if (typeof liff === 'undefined' || LIFF_ID === 'LIFF_ID_HERE') {
-    // SDK未ロード or LIFF_ID未設定 → URL parameterのuserIdをそのまま使用
-    return;
-  }
+  if (typeof liff === 'undefined' || !LIFF_ID || LIFF_ID === 'LIFF_ID_HERE') return;
   liff.init({ liffId: LIFF_ID })
     .then(function() {
-      // LINEアプリ内 or ログイン済みの場合はプロフィール取得
-      if (liff.isInClient() || liff.isLoggedIn()) {
-        return liff.getProfile();
-      }
+      if (liff.isInClient() || liff.isLoggedIn()) return liff.getProfile();
       return null;
     })
     .then(function(profile) {
       if (profile && profile.userId) {
         USER_ID = profile.userId;
-        console.log('LIFF userId 取得成功:', USER_ID);
       }
     })
     .catch(function(err) {
-      // LIFF失敗してもアプリは動く（URL parameterのuserIdにフォールバック）
-      console.warn('LIFF init 失敗、URLパラメータのuserIdを使用:', err);
+      console.warn('LIFF init 失敗:', err);
     });
 }
 
+// ============================================================
+// 起動
+// ============================================================
 window.addEventListener('load', function() {
-  initLIFF(); // LIFFでuserIdを取得（失敗してもURLパラメータが残る）
+  initLIFF();
   init();
-  setupZoomPrevention(); // iOS 15+ ズーム防止
-  setupKeyboardFix();
-  setTimeout(function() {
-    if (map) map.invalidateSize();
-  }, 300);
+  setTimeout(function() { if (map) map.invalidateSize(); }, 300);
 });
 </script>
-
 </body>
 </html>
