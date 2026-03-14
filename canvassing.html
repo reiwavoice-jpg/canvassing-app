@@ -1045,24 +1045,32 @@ function addMapMarker(v) {
 // 位置確認オーバーレイ（Step1: ドラッグで位置修正）
 // ============================================================
 function openPosPicker() {
-  // 地図を表示状態にしてサイズ調整
+  // ① まずオーバーレイを表示（住所取得の成否に関わらず必ず表示）
+  var addrEl    = document.getElementById('pp-addr');
+  var confirmBtn = document.getElementById('pp-confirm-btn');
+  addrEl.textContent = 'GPS位置から住所を取得中...';
+  addrEl.classList.add('loading');
+  confirmBtn.disabled = true;
+  document.getElementById('pos-picker').classList.add('active');
+
+  // ② 地図サイズを更新
   setTimeout(function() { if (map) map.invalidateSize(); }, 100);
 
-  // 仮ピンの初期位置（現在地 or デフォルト）
+  // ③ 仮ピンの初期位置（現在地 or デフォルト）
   var lat = currentLat !== null ? currentLat : DEFAULT_LAT;
   var lng = currentLng !== null ? currentLng : DEFAULT_LNG;
 
-  // 既存の仮ピンを削除
+  // ④ 既存の仮ピンを削除
   if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
 
-  // ドラッグ可能なピンを地図に追加
+  // ⑤ ドラッグ可能なピンを地図に追加
   posMarker = L.marker([lat, lng], {
     draggable: true,
     autoPan: true,
     icon: L.divIcon({
       html: '<div style="'
           + 'width:36px;height:36px;'
-          + 'background:var(--green);'
+          + 'background:#06C755;'
           + 'border:3px solid white;'
           + 'border-radius:50% 50% 50% 0;'
           + 'transform:rotate(-45deg);'
@@ -1074,20 +1082,13 @@ function openPosPicker() {
     })
   }).addTo(map);
 
-  // 地図をピン位置に移動
+  // ⑥ 地図をピン位置にズーム
   map.setView([lat, lng], Math.max(map.getZoom(), 17));
 
-  // 住所表示をリセット
-  var addrEl   = document.getElementById('pp-addr');
-  var confirmBtn = document.getElementById('pp-confirm-btn');
-  addrEl.textContent = 'GPS位置から住所を取得中...';
-  addrEl.classList.add('loading');
-  confirmBtn.disabled = true;
-
-  // 初期位置の住所を取得
+  // ⑦ 初期位置の住所を取得
   fetchAddressForPin(lat, lng);
 
-  // ドラッグ中: 「移動中...」表示
+  // ⑧ ドラッグ中: 「取得中...」表示
   posMarker.on('dragstart', function() {
     clearTimeout(geocodeTimer);
     addrEl.textContent = '🔄 住所を取得中...';
@@ -1095,7 +1096,7 @@ function openPosPicker() {
     confirmBtn.disabled = true;
   });
 
-  // ドラッグ終了: 新しい位置の住所を取得（300msデバウンス）
+  // ⑨ ドラッグ終了: 新しい位置の住所を取得（300msデバウンス）
   posMarker.on('dragend', function(e) {
     var pos = e.target.getLatLng();
     clearTimeout(geocodeTimer);
@@ -1103,24 +1104,30 @@ function openPosPicker() {
       fetchAddressForPin(pos.lat, pos.lng);
     }, 300);
   });
-
-  // オーバーレイを表示
-  document.getElementById('pos-picker').classList.add('active');
 }
 
 function fetchAddressForPin(lat, lng) {
   var addrEl    = document.getElementById('pp-addr');
   var confirmBtn = document.getElementById('pp-confirm-btn');
 
-  reverseGeocodeDetailed(lat, lng, function(addr) {
-    pickedLat     = lat;
-    pickedLng     = lng;
-    pickedAddress = addr;
+  // 座標を先に確定（住所取得に失敗しても位置は保持）
+  pickedLat = lat;
+  pickedLng = lng;
 
-    addrEl.textContent = addr || '住所を取得できませんでした';
+  try {
+    reverseGeocodeDetailed(lat, lng, function(addr) {
+      pickedAddress = addr || (lat.toFixed(6) + ', ' + lng.toFixed(6));
+      addrEl.textContent = pickedAddress;
+      addrEl.classList.remove('loading');
+      confirmBtn.disabled = false;
+    });
+  } catch(e) {
+    // reverseGeocodeDetailed が何らかの理由で失敗しても座標で続行
+    pickedAddress = lat.toFixed(6) + ', ' + lng.toFixed(6);
+    addrEl.textContent = pickedAddress;
     addrEl.classList.remove('loading');
     confirmBtn.disabled = false;
-  });
+  }
 }
 
 function closePosPicker() {
