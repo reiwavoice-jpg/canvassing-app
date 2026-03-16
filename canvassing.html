@@ -289,6 +289,25 @@
       font-size: 13px; font-weight: 600; padding: 8px 12px; cursor: pointer;
     }
 
+    /* 緑のしずく型ピン（地図上のピンと同じ形・色） */
+    .gpin {
+      display: inline-block;
+      width: 12px; height: 12px;
+      background: #06C755;
+      border: 2px solid white;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      vertical-align: middle;
+      margin-right: 4px;
+      flex-shrink: 0;
+    }
+    .gpin-lg {
+      width: 28px; height: 28px;
+      border-width: 3px;
+      margin-right: 0;
+    }
+
     /* 中央インジケーター */
     .pp-center-hint {
       position: absolute;
@@ -306,13 +325,11 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
     .pp-crosshair {
-      font-size: 36px;
-      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
       animation: pp-pulse 2s infinite;
     }
     @keyframes pp-pulse {
-      0%,100% { transform: scale(1); opacity: 1; }
-      50%      { transform: scale(1.15); opacity: 0.8; }
+      0%,100% { transform: scale(1) rotate(-45deg); opacity: 1; }
+      50%      { transform: scale(1.2) rotate(-45deg); opacity: 0.85; }
     }
 
     /* 下バー */
@@ -627,7 +644,7 @@
   <!-- 上バー -->
   <div class="pp-top">
     <div>
-      <div class="pp-top-title">📍 位置を確認・修正してください</div>
+      <div class="pp-top-title"><span class="gpin"></span> 位置を確認・修正してください</div>
       <div class="pp-top-hint">緑のピンをドラッグして正確な場所に合わせてください</div>
     </div>
     <button class="pp-cancel" onclick="closePosPicker()">✕ キャンセル</button>
@@ -635,16 +652,16 @@
 
   <!-- 中央インジケーター（地図の上に浮かぶ。pointer-events:none で地図操作はそのまま通る） -->
   <div class="pp-center-hint">
-    <div class="pp-crosshair">📍</div>
-    <div class="pp-center-badge">👆 ピンをドラッグして位置を調整</div>
+    <div class="pp-crosshair"><span class="gpin gpin-lg"></span></div>
+    <div class="pp-center-badge">👆 緑のピンをドラッグして位置を調整</div>
   </div>
 
   <!-- 下バー（住所表示 + 2ステップボタン） -->
   <div class="pp-bottom">
-    <div class="pp-addr-label" id="pp-addr-label">📍 取得した住所</div>
-    <div class="pp-addr-text" id="pp-addr">ピンを正確な場所に動かしてから住所を取得してください</div>
+    <div class="pp-addr-label" id="pp-addr-label"><span class="gpin"></span> 取得した住所</div>
+    <div class="pp-addr-text" id="pp-addr">緑のピンを正確な場所に動かしてから住所を取得してください</div>
     <button class="pp-confirm-btn" id="pp-confirm-btn" onclick="posPickerButtonTap()">
-      📍 住所を取得する
+      <span class="gpin"></span> 住所を取得する
     </button>
   </div>
 </div>
