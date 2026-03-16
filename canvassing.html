@@ -346,6 +346,10 @@
     }
     .pp-confirm-btn:active { background: var(--green-dark); }
     .pp-confirm-btn:disabled { background: #bbb; cursor: not-allowed; }
+    .pp-confirm-btn.fetched {
+      background: #1565C0; /* 青：「確定する」状態を視覚的に区別 */
+    }
+    .pp-confirm-btn.fetched:active { background: #0D47A1; }
 
     /* ===== フォームオーバーレイ（iOS zoom防止でappの外に置く） ===== */
     #form-overlay {
@@ -635,12 +639,12 @@
     <div class="pp-center-badge">👆 ピンをドラッグして位置を調整</div>
   </div>
 
-  <!-- 下バー（住所表示 + 確定ボタン） -->
+  <!-- 下バー（住所表示 + 2ステップボタン） -->
   <div class="pp-bottom">
-    <div class="pp-addr-label">📍 取得した住所</div>
-    <div class="pp-addr-text loading" id="pp-addr">GPS位置から住所を取得中...</div>
-    <button class="pp-confirm-btn" id="pp-confirm-btn" onclick="confirmPosition()" disabled>
-      ✅ この位置で記録する
+    <div class="pp-addr-label" id="pp-addr-label">📍 取得した住所</div>
+    <div class="pp-addr-text" id="pp-addr">ピンを正確な場所に動かしてから住所を取得してください</div>
+    <button class="pp-confirm-btn" id="pp-confirm-btn" onclick="posPickerButtonTap()">
+      📍 住所を取得する
     </button>
   </div>
 </div>
@@ -793,11 +797,12 @@ var lastRecordedPos  = null;
 var lastRecordedTime = null;
 
 // 位置確認オーバーレイ用
-var posMarker     = null;  // ドラッグ可能な仮ピン
-var pickedLat     = null;  // 確定した緯度
-var pickedLng     = null;  // 確定した経度
-var pickedAddress = '';    // 確定した住所
-var geocodeTimer  = null;  // dragend後のデバウンス用
+var posMarker          = null;   // ドラッグ可能な仮ピン
+var pickedLat          = null;   // 確定した緯度
+var pickedLng          = null;   // 確定した経度
+var pickedAddress      = '';     // 確定した住所
+var geocodeTimer       = null;   // dragend後のデバウンス用
+var posPickerFetched   = false;  // 住所取得済みフラグ（ボタンの2ステップ管理）
 
 // 8段階ステータスの色
 var STATUS_COLORS = {
@@ -1070,12 +1075,16 @@ function openPosPicker() {
   // ① form-overlay が残っていれば必ず閉じる（安全策）
   document.getElementById('form-overlay').style.display = 'none';
 
-  // ② pos-picker オーバーレイを最初に表示（住所取得の成否に関わらず必ず表示）
+  // ② pos-picker オーバーレイを表示（住所はまだ取得しない）
   var addrEl    = document.getElementById('pp-addr');
   var confirmBtn = document.getElementById('pp-confirm-btn');
-  addrEl.textContent = 'GPS位置から住所を取得中...';
-  addrEl.classList.add('loading');
-  confirmBtn.disabled = true;
+  // 住所取得フラグをリセット（2ステップボタン管理）
+  posPickerFetched = false;
+  addrEl.textContent = 'ピンを正確な場所に動かしてから住所を取得してください';
+  addrEl.classList.remove('loading');
+  confirmBtn.textContent = '📍 住所を取得する';
+  confirmBtn.classList.remove('fetched');
+  confirmBtn.disabled = false;
   document.getElementById('pos-picker').classList.add('active');
 
   // ② 地図サイズを更新
@@ -1110,18 +1119,21 @@ function openPosPicker() {
   // ⑥ 地図をピン位置にズーム
   map.setView([lat, lng], Math.max(map.getZoom(), 17));
 
-  // ⑦ 初期位置の住所を取得
-  fetchAddressForPin(lat, lng);
+  // ⑦ 初期位置の住所は自動取得しない
+  //    → ユーザーがピンを動かした後、または「住所を取得する」ボタンで取得
 
-  // ⑧ ドラッグ中: 「取得中...」表示
+  // ⑧ ドラッグ中: 「移動中...」表示・ボタンを取得状態に戻す
   posMarker.on('dragstart', function() {
     clearTimeout(geocodeTimer);
+    posPickerFetched = false;
     addrEl.textContent = '🔄 住所を取得中...';
     addrEl.classList.add('loading');
+    confirmBtn.textContent = '📍 住所を取得する';
+    confirmBtn.classList.remove('fetched');
     confirmBtn.disabled = true;
   });
 
-  // ⑨ ドラッグ終了: 新しい位置の住所を取得（300msデバウンス）
+  // ⑨ ドラッグ終了: 止まった座標で住所を自動取得（300msデバウンス）
   posMarker.on('dragend', function(e) {
     var pos = e.target.getLatLng();
     clearTimeout(geocodeTimer);
@@ -1139,19 +1151,38 @@ function fetchAddressForPin(lat, lng) {
   pickedLat = lat;
   pickedLng = lng;
 
-  try {
-    reverseGeocodeDetailed(lat, lng, function(addr) {
-      pickedAddress = addr || (lat.toFixed(6) + ', ' + lng.toFixed(6));
-      addrEl.textContent = pickedAddress;
-      addrEl.classList.remove('loading');
-      confirmBtn.disabled = false;
-    });
-  } catch(e) {
-    // reverseGeocodeDetailed が何らかの理由で失敗しても座標で続行
-    pickedAddress = lat.toFixed(6) + ', ' + lng.toFixed(6);
+  addrEl.classList.add('loading');
+  confirmBtn.disabled = true;
+
+  function onAddressFetched(addr) {
+    pickedAddress = addr || (lat.toFixed(6) + ', ' + lng.toFixed(6));
     addrEl.textContent = pickedAddress;
     addrEl.classList.remove('loading');
+    // 住所取得後はボタンを「確定する」に切り替え
+    posPickerFetched = true;
+    confirmBtn.textContent = '✅ この位置で記録する';
+    confirmBtn.classList.add('fetched');
     confirmBtn.disabled = false;
+  }
+
+  try {
+    reverseGeocodeDetailed(lat, lng, onAddressFetched);
+  } catch(e) {
+    onAddressFetched(lat.toFixed(6) + ', ' + lng.toFixed(6));
+  }
+}
+
+// ボタンタップ処理（2ステップ）
+// 1回目タップ → 現在のピン位置で住所を取得
+// 2回目タップ → 住所確定してフォームへ進む
+function posPickerButtonTap() {
+  if (!posPickerFetched) {
+    // まだ住所未取得 → 現在のピン位置で取得
+    var pos = posMarker ? posMarker.getLatLng() : { lat: currentLat || DEFAULT_LAT, lng: currentLng || DEFAULT_LNG };
+    fetchAddressForPin(pos.lat, pos.lng);
+  } else {
+    // 住所取得済み → 確定してフォームへ
+    confirmPosition();
   }
 }
 
