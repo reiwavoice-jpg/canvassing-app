@@ -760,6 +760,7 @@
 // ============================================================
 var LIFF_ID = '2009413587-0Plg0ecV';
 var GAS_URL = 'https://script.google.com/macros/s/AKfycbxjjLVWPU06BgmwtYrnyjC8LIuV54mzG0YMa_SkWuL5yN8y6m9GEbM_C0cRtX7UlWOM/exec';
+// ※ Google Geocoding APIキーは GAS の Script Properties に保存済み（コードに書かない）
 
 var DEFAULT_LAT = 35.4849;
 var DEFAULT_LNG = 139.4081;
@@ -1562,8 +1563,32 @@ function reverseGeocode(lat, lng, cb) {
     .catch(function() { cb(lat.toFixed(5) + ', ' + lng.toFixed(5)); });
 }
 
-// 大字・丁目・番地・枝番まで含む詳細住所取得（位置確認ピン用）
+// ============================================================
+// 詳細住所取得（枝番まで対応）
+// APIキーは GAS の Script Properties に保存（コードに書かない）
+// GAS → Google Geocoding API の順で呼び出し
+// GAS が失敗した場合は Nominatim（OpenStreetMap）にフォールバック
+// 地図表示は引き続き OpenStreetMap を使用（無料・無制限）
+// ============================================================
 function reverseGeocodeDetailed(lat, lng, cb) {
+  // GAS プロキシ経由で住所取得（APIキーはGAS側で管理）
+  gasAPI({ action: 'getAddress', lat: lat, lng: lng })
+    .then(function(res) {
+      if (res && res.success && res.address) {
+        cb(res.address);
+      } else {
+        // GASが失敗した場合は Nominatim にフォールバック
+        reverseGeocodeNominatim(lat, lng, cb);
+      }
+    })
+    .catch(function() {
+      // 通信エラー時も Nominatim にフォールバック
+      reverseGeocodeNominatim(lat, lng, cb);
+    });
+}
+
+// Nominatim による逆ジオコーディング（フォールバック用）
+function reverseGeocodeNominatim(lat, lng, cb) {
   fetch(
     'https://nominatim.openstreetmap.org/reverse?lat=' + lat
     + '&lon=' + lng
@@ -1573,32 +1598,17 @@ function reverseGeocodeDetailed(lat, lng, cb) {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       var a = d.address || {};
-
-      // 日本語住所の組み立て（都道府県 → 市区町村 → 大字/地区 → 丁目 → 番地 → 号）
-      var pref   = a.state          || '';          // 神奈川県
-      var city   = a.city || a.town || a.village || a.county || ''; // 座間市
-      var ward   = a.city_district  || '';          // 区（政令市）
-      var oaza   = a.suburb || a.hamlet || '';      // 大字・地区名
-      var chome  = a.quarter || a.neighbourhood || ''; // 丁目・字
-      var road   = a.road           || '';          // 番地相当（Nominatim では road に入ることが多い）
-      var num    = a.house_number   || '';          // 号・枝番
-
-      var addr = pref + city + ward + oaza + chome + road + num;
-
-      // フォールバック: 組み立てできなければ display_name の後半部分、それもなければ座標
-      if (!addr) {
-        if (d.display_name) {
-          // display_name は "番地, 大字, 市, 県, 郵便番号, 国" の順なので先頭3〜4要素を逆順に
-          var parts = d.display_name.split(', ');
-          addr = parts.slice(0, Math.min(4, parts.length)).reverse().join('');
-        } else {
-          addr = lat.toFixed(6) + ', ' + lng.toFixed(6);
-        }
-      }
-      cb(addr);
+      var pref  = a.state || '';
+      var city  = a.city || a.town || a.village || a.county || '';
+      var ward  = a.city_district || '';
+      var oaza  = a.suburb || a.hamlet || '';
+      var chome = a.quarter || a.neighbourhood || '';
+      var road  = a.road || '';
+      var num   = a.house_number || '';
+      var addr  = pref + city + ward + oaza + chome + road + num;
+      cb(addr || d.display_name || lat.toFixed(6) + ', ' + lng.toFixed(6));
     })
     .catch(function() {
-      // ネットワークエラー時は座標を返す
       cb(lat.toFixed(6) + ', ' + lng.toFixed(6));
     });
 }
