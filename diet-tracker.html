@@ -739,6 +739,8 @@
 
       updateCalorySummary(); updateMealList();
       showToast('✅ 食事を記録しました');
+      // GASスプレッドシートに保存（fire & forget）
+      saveDietToGAS({ type:'meal', date:today, mealTime:time, name:name, calories:calories });
     }
 
     function updateMealList() {
@@ -797,6 +799,8 @@
 
       updateCalorySummary(); updateExerciseList();
       showToast('✅ 運動を記録しました（' + cal + ' kcal消費）');
+      // GASスプレッドシートに保存（fire & forget）
+      saveDietToGAS({ type:'exercise', date:today, name:names[selectedExerciseType] || '', minutes:mins, calories:cal });
     }
 
     function updateExerciseList() {
@@ -840,6 +844,8 @@
       document.getElementById('weightForm').reset();
       renderWeightChart();
       showToast('✅ 体重を記録しました');
+      // GASスプレッドシートに保存（fire & forget）
+      saveDietToGAS({ type:'weight', date:today, weight:w });
     }
 
     function initWeightChart() {
@@ -868,6 +874,23 @@
       });
       weightChart.data.datasets[0].data = last7.map(function(w) { return w.weight; });
       weightChart.update();
+    }
+
+    // ============================================================
+    // GASスプレッドシートに保存（共通・fire & forget）
+    // ============================================================
+    function saveDietToGAS(data) {
+      data.userId = lineUserId || '';
+      fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ action: 'saveDiet' }, data))
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.success) console.warn('GAS保存エラー:', d.error);
+      })
+      .catch(function(e) { console.warn('GAS通信エラー:', e); });
     }
 
     // ============================================================
