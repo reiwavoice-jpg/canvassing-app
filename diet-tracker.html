@@ -141,17 +141,26 @@
     .form-row .form-group { flex: 1; }
 
     /* ===== 写真アップロード ===== */
-    .photo-upload {
-      width: 100%; height: 180px;
+    .photo-preview-area {
+      width: 100%; height: 160px;
       border: 2px dashed var(--border); border-radius: 12px;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      cursor: pointer; background: var(--bg);
+      background: var(--bg); margin-bottom: 10px;
+      overflow: hidden;
     }
-    .photo-upload.has-image { padding: 0; border: none; }
-    .photo-preview { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
-    .photo-icon { font-size: 40px; margin-bottom: 8px; }
+    .photo-preview-area.has-image { border: none; }
+    .photo-preview { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
+    .photo-icon { font-size: 36px; margin-bottom: 6px; }
     .photo-text { font-size: 13px; color: var(--light); }
+    .photo-btns { display: flex; gap: 8px; }
+    .photo-btn {
+      flex: 1; padding: 11px 8px;
+      border: 1px solid var(--border); border-radius: 8px;
+      background: white; font-size: 13px; font-weight: 600;
+      cursor: pointer; text-align: center; color: var(--dark);
+    }
+    .photo-btn.camera { background: var(--green); color: white; border-color: var(--green); }
 
     /* ===== ボタン ===== */
     .btn {
@@ -285,12 +294,18 @@
     <div class="section">
       <div class="section-title">📸 食事を記録</div>
       <form id="mealForm">
-        <input type="file" id="mealPhoto" accept="image/*" style="display:none;">
+        <!-- カメラ直接起動 -->
+        <input type="file" id="mealPhotoCamera" accept="image/*" capture="environment" style="display:none;">
+        <!-- アルバム選択 -->
+        <input type="file" id="mealPhotoAlbum"  accept="image/*" style="display:none;">
         <div class="form-group">
-          <div class="photo-upload" id="photoUpload" onclick="document.getElementById('mealPhoto').click()">
+          <div class="photo-preview-area" id="photoPreviewArea">
             <div class="photo-icon">📷</div>
-            <div class="photo-text">写真を撮る / 選択</div>
-            <div class="photo-text" style="font-size:11px;margin-top:4px;">AIが自動でカロリー計算します</div>
+            <div class="photo-text">下のボタンから写真を追加</div>
+          </div>
+          <div class="photo-btns">
+            <button type="button" class="photo-btn camera" onclick="document.getElementById('mealPhotoCamera').click()">📷 カメラで撮影</button>
+            <button type="button" class="photo-btn"        onclick="document.getElementById('mealPhotoAlbum').click()">🖼️ アルバムから選択</button>
           </div>
         </div>
         <div class="form-group">
@@ -536,7 +551,8 @@
       document.getElementById('weightForm').addEventListener('submit', function(e) {
         e.preventDefault(); saveWeight();
       });
-      document.getElementById('mealPhoto').addEventListener('change', handlePhotoSelect);
+      document.getElementById('mealPhotoCamera').addEventListener('change', handlePhotoSelect);
+      document.getElementById('mealPhotoAlbum').addEventListener('change', handlePhotoSelect);
 
       document.querySelectorAll('.exercise-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -661,7 +677,7 @@
       var reader = new FileReader();
       reader.onload = function(ev) {
         currentPhotoData = ev.target.result;
-        var el = document.getElementById('photoUpload');
+        var el = document.getElementById('photoPreviewArea');
         el.classList.add('has-image');
         el.innerHTML = '<img src="' + currentPhotoData + '" class="photo-preview" alt="食事写真">';
       };
@@ -692,7 +708,53 @@
     }
 
     // ============================================================
-    // AI分析（テキスト）
+    // ローカル日本食カロリーデータベース（GAS失敗時のフォールバック）
+    // ============================================================
+    var LOCAL_FOOD_DB = [
+      ['白米・ご飯',200],['おにぎり',190],['パン・食パン',250],['クロワッサン',430],
+      ['ラーメン',500],['醤油ラーメン',480],['味噌ラーメン',520],['塩ラーメン',460],
+      ['とんこつラーメン',570],['つけ麺',600],['焼きそば',490],['うどん',280],
+      ['そば',290],['そうめん',240],['パスタ',580],['カルボナーラ',750],
+      ['ナポリタン',530],['ペペロンチーノ',500],['カレー',700],['カレーライス',700],
+      ['チャーハン',580],['オムライス',620],['ハヤシライス',650],['牛丼',650],
+      ['親子丼',620],['カツ丼',750],['天丼',720],['うな丼',700],['海鮮丼',550],
+      ['焼き肉定食',850],['唐揚げ定食',820],['とんかつ定食',880],['魚定食',650],
+      ['唐揚げ',300],['とんかつ',400],['から揚げ',300],['餃子',250],
+      ['焼き鳥',200],['天ぷら',350],['フライドチキン',380],['ハンバーグ',350],
+      ['ステーキ',450],['すき焼き',500],['しゃぶしゃぶ',400],['鍋',350],
+      ['寿司',350],['刺身',200],['寿司10貫',450],['握り寿司',350],
+      ['ハンバーガー',480],['チーズバーガー',520],['ビッグマック',530],
+      ['フライドポテト',380],['ピザ',600],['ピザ1切れ',200],
+      ['サンドイッチ',350],['おにぎり',190],['弁当',600],['幕の内弁当',680],
+      ['玉子かけご飯',350],['納豆ご飯',380],['目玉焼き',90],['卵焼き',110],
+      ['味噌汁',30],['サラダ',60],['シーザーサラダ',200],
+      ['コーヒー',5],['カフェラテ',120],['紅茶',3],['緑茶',3],
+      ['コーラ',140],['ジュース',120],['牛乳',130],['豆乳',90],
+      ['アイスクリーム',200],['プリン',130],['ケーキ',350],['ショートケーキ',320],
+      ['チョコレート',150],['クッキー',180],['おせんべい',100],
+      ['バナナ',90],['りんご',80],['みかん',50],['いちご',50],
+      ['ヨーグルト',100],['チーズ',180],['バター',75]
+    ];
+
+    function estimateCaloriesLocally(name) {
+      var best = null, bestScore = 0;
+      for (var i = 0; i < LOCAL_FOOD_DB.length; i++) {
+        var food = LOCAL_FOOD_DB[i][0];
+        var cal  = LOCAL_FOOD_DB[i][1];
+        // キーワードが含まれていればスコア計算
+        var score = 0;
+        var keywords = food.replace(/[・]/g, ' ').split(' ');
+        for (var k = 0; k < keywords.length; k++) {
+          if (keywords[k] && name.indexOf(keywords[k]) >= 0) score += keywords[k].length;
+        }
+        if (score > bestScore) { bestScore = score; best = cal; }
+      }
+      // 全くマッチしなければ平均的な値を返す
+      return best || 500;
+    }
+
+    // ============================================================
+    // AI分析（テキスト）- GAS失敗時はローカルDBにフォールバック
     // ============================================================
     function analyzeText() {
       var name = document.getElementById('mealName').value.trim();
@@ -705,12 +767,19 @@
       })
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        if (d.success) {
+        if (d.success && d.calories) {
           document.getElementById('mealCalories').value = d.calories;
           showToast('🤖 「' + name + '」のカロリーを推定しました');
-        } else { throw new Error(d.error); }
+        } else {
+          throw new Error('GAS返答なし');
+        }
       })
-      .catch(function(e) { console.error(e); showToast('❌ 分析に失敗しました'); })
+      .catch(function() {
+        // GAS失敗 → ローカルDBで推定
+        var cal = estimateCaloriesLocally(name);
+        document.getElementById('mealCalories').value = cal;
+        showToast('📊 「' + name + '」 約' + cal + 'kcal（ローカル推定）');
+      })
       .finally(function() { hideLoading(); });
     }
 
@@ -731,11 +800,10 @@
 
       document.getElementById('mealForm').reset();
       currentPhotoData = null;
-      var pu = document.getElementById('photoUpload');
+      var pu = document.getElementById('photoPreviewArea');
       pu.classList.remove('has-image');
       pu.innerHTML = '<div class="photo-icon">📷</div>'
-                   + '<div class="photo-text">写真を撮る / 選択</div>'
-                   + '<div class="photo-text" style="font-size:11px;margin-top:4px;">AIが自動でカロリー計算します</div>';
+                   + '<div class="photo-text">下のボタンから写真を追加</div>';
 
       updateCalorySummary(); updateMealList();
       showToast('✅ 食事を記録しました');
