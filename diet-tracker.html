@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#06C755">
+  <title>ダイエット記録 - 議員サポート</title>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    :root {
+      --line-green: #06C755;
+      --line-green-dark: #05a847;
+      --bg-gray: #f5f5f5;
+      --border-gray: #e0e0e0;
+      --text-dark: #333;
+      --text-light: #666;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+      --red: #f44336;
+      --blue: #2196f3;
+      --orange: #ff9800;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', 'Hiragino Kaku Gothic ProN', 'メイリオ', sans-serif;
+      background: var(--bg-gray);
+      padding-bottom: 70px;
+    }
+    
+    /* ヘッダー */
+    .header {
+      background: linear-gradient(135deg, var(--line-green) 0%, var(--line-green-dark) 100%);
+      color: white;
+      padding: 20px 16px;
+      box-shadow: var(--shadow);
+    }
+    
+    .header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .header-date {
+      font-size: 13px;
+      opacity: 0.9;
+    }
+    
+    /* カロリーサマリー */
+    .calorie-summary {
+      background: white;
+      margin: 16px;
+      padding: 20px;
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    
+    .calorie-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    
+    .calorie-row:last-child {
+      margin-bottom: 0;
+      padding-top: 12px;
+      border-top: 2px dashed var(--border-gray);
+    }
+    
+    .calorie-label {
+      font-size: 15px;
+      color: var(--text-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .calorie-value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+    
+    .calorie-value.intake {
+      color: var(--red);
+    }
+    
+    .calorie-value.burn {
+      color: var(--blue);
+    }
+    
+    .calorie-value.balance {
+      color: var(--text-dark);
+    }
+    
+    .calorie-unit {
+      font-size: 14px;
+      color: var(--text-light);
+      margin-left: 4px;
+    }
+    
+    /* タブバー */
+    .tab-bar {
+      background: white;
+      display: flex;
+      border-bottom: 1px solid var(--border-gray);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .tab-btn {
+      flex: 1;
+      padding: 14px 8px;
+      font-size: 13px;
+      color: var(--text-light);
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .tab-btn.active {
+      color: var(--line-green);
+      border-bottom-color: var(--line-green);
+      font-weight: 600;
+    }
+    
+    /* コンテンツ */
+    .content {
+      padding: 16px;
+    }
+    
+    .view {
+      display: none;
+    }
+    
+    .view.active {
+      display: block;
+    }
+    
+    /* セクション */
+    .section {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }
+    
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-dark);
+      margin-bottom: 16px;
+    }
+    
+    /* 食事記録カード */
+    .meal-card {
+      background: var(--bg-gray);
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      display: flex;
+      gap: 12px;
+    }
+    
+    .meal-card:last-child {
+      margin-bottom: 0;
+    }
+    
+    .meal-image {
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: var(--border-gray);
+      flex-shrink: 0;
+    }
+    
+    .meal-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    
+    .meal-time {
+      font-size: 12px;
+      color: var(--text-light);
+    }
+    
+    .meal-name {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-dark);
+      margin: 4px 0;
+    }
+    
+    .meal-calories {
+      font-size: 18px;
+      font-weight: bold;
+      color: var(--red);
+    }
+    
+    .meal-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    /* フォーム */
+    .form-group {
+      margin-bottom: 16px;
+    }
+    
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-dark);
+      margin-bottom: 6px;
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border-gray);
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+    }
+    
+    .form-input:focus {
+      outline: none;
+      border-color: var(--line-green);
+    }
+    
+    .form-row {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .form-row .form-group {
+      flex: 1;
+    }
+    
+    /* 写真アップロード */
+    .photo-upload {
+      width: 100%;
+      height: 200px;
+      border: 2px dashed var(--border-gray);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--bg-gray);
+    }
+    
+    .photo-upload:hover {
+      border-color: var(--line-green);
+      background: rgba(6, 199, 85, 0.05);
+    }
+    
+    .photo-upload.has-image {
+      padding: 0;
+      border: none;
+    }
+    
+    .photo-preview {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 12px;
+    }
+    
+    .photo-icon {
+      font-size: 48px;
+      margin-bottom: 8px;
+    }
+    
+    .photo-text {
+      font-size: 14px;
+      color: var(--text-light);
+    }
+    
+    /* ボタン */
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: var(--line-green);
+      color: white;
+    }
+    
+    .btn-primary:active {
+      background: var(--line-green-dark);
+      transform: scale(0.98);
+    }
+    
+    .btn-secondary {
+      background: white;
+      color: var(--text-dark);
+      border: 1px solid var(--border-gray);
+      margin-top: 8px;
+    }
+    
+    .btn-secondary:active {
+      background: var(--bg-gray);
+    }
+    
+    .icon-btn {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: rgba(0,0,0,0.05);
+      border-radius: 50%;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .icon-btn:active {
+      background: rgba(0,0,0,0.1);
+    }
+    
+    /* 運動リスト */
+    .exercise-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border-gray);
+    }
+    
+    .exercise-item:last-child {
+      border-bottom: none;
+    }
+    
+    .exercise-item.gps-exercise {
+      background: linear-gradient(90deg, rgba(6,199,85,0.05) 0%, rgba(6,199,85,0) 100%);
+      padding: 12px;
+      margin: 0 -12px;
+      border-left: 3px solid var(--line-green);
+      border-radius: 4px;
+    }
+    
+    .exercise-info {
+      flex: 1;
+    }
+    
+    .exercise-name {
+      font-size: 15px;
+      color: var(--text-dark);
+      margin-bottom: 4px;
+    }
+    
+    .exercise-time {
+      font-size: 13px;
+      color: var(--text-light);
+    }
+    
+    .exercise-calories {
+      font-size: 18px;
+      font-weight: bold;
+      color: var(--blue);
+      margin-right: 12px;
+    }
+    
+    /* グラフ */
+    .chart-container {
+      position: relative;
+      height: 250px;
+      margin-top: 16px;
+    }
+    
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-light);
+    }
+    
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+      opacity: 0.3;
+    }
+    
+    .empty-text {
+      font-size: 14px;
+    }
+    
+    /* トースト */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 24px;
+      font-size: 14px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 999;
+      pointer-events: none;
+      max-width: 80%;
+    }
+    
+    .toast.show {
+      opacity: 1;
+    }
+    
+    /* ローディング */
+    .loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    
+    .loading.show {
+      display: flex;
+    }
+    
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* 運動選択グリッド */
+    .exercise-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .exercise-btn {
+      padding: 16px 8px;
+      background: var(--bg-gray);
+      border: 2px solid transparent;
+      border-radius: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    
+    .exercise-btn.selected {
+      background: rgba(6, 199, 85, 0.1);
+      border-color: var(--line-green);
+    }
+    
+    .exercise-btn-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    
+    .exercise-btn-name {
+      font-size: 13px;
+      color: var(--text-dark);
+    }
+    
+    .exercise-btn-cal {
+      font-size: 11px;
+      color: var(--text-light);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <!-- ヘッダー -->
+  <div class="header">
+    <h1>🍎 ダイエット記録</h1>
+    <div class="header-date" id="headerDate"></div>
+  </div>
+  
+  <!-- カロリーサマリー -->
+  <div class="calorie-summary">
+    <div class="calorie-row">
+      <div class="calorie-label">
+        <span>🍽️</span>
+        <span>摂取カロリー</span>
+      </div>
+      <div class="calorie-value intake">
+        <span id="totalIntake">0</span>
+        <span class="calorie-unit">kcal</span>
+      </div>
+    </div>
+    
+    <div class="calorie-row">
+      <div class="calorie-label">
+        <span>🔥</span>
+        <span>消費カロリー</span>
+      </div>
+      <div class="calorie-value burn">
+        <span id="totalBurn">0</span>
+        <span class="calorie-unit">kcal</span>
+      </div>
+    </div>
+    
+    <div class="calorie-row">
+      <div class="calorie-label">
+        <span>⚖️</span>
+        <span>差し引き</span>
+      </div>
+      <div class="calorie-value balance">
+        <span id="balance">0</span>
+        <span class="calorie-unit">kcal</span>
+      </div>
+    </div>
+  </div>
+  
+  <!-- タブバー -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-view="meals">🍽️ 食事</button>
+    <button class="tab-btn" data-view="exercise">🏃 運動</button>
+    <button class="tab-btn" data-view="weight">📊 体重</button>
+  </div>
+  
+  <!-- コンテンツ -->
+  <div class="content">
+    <!-- 食事ビュー -->
+    <div class="view active" id="meals">
+      <!-- 食事記録フォーム -->
+      <div class="section">
+        <div class="section-title">📸 食事を記録</div>
+        
+        <form id="mealForm">
+          <input type="file" id="mealPhoto" accept="image/*" style="display: none;">
+          
+          <div class="form-group">
+            <div class="photo-upload" id="photoUpload" onclick="document.getElementById('mealPhoto').click()">
+              <div class="photo-icon">📷</div>
+              <div class="photo-text">写真を撮る / 選択</div>
+              <div class="photo-text" style="font-size: 12px; margin-top: 4px;">AIが自動でカロリー計算します</div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">🍴 メニュー名</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" class="form-input" id="mealName" placeholder="例: 唐揚げ定食" style="flex: 1;">
+              <button type="button" class="btn btn-secondary" onclick="analyzeText()" style="width: auto; white-space: nowrap; padding: 10px 16px;">🤖 AI分析</button>
+            </div>
+            <div style="font-size: 12px; color: var(--text-light); margin-top: 4px;">※メニュー名を入力してAI分析ボタンを押すとカロリーを自動計算します</div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">🔥 カロリー（kcal）</label>
+              <input type="number" class="form-input" id="mealCalories" placeholder="850">
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">⏰ 時刻</label>
+              <select class="form-input" id="mealTime">
+                <option value="朝食">朝食</option>
+                <option value="昼食">昼食</option>
+                <option value="夕食">夕食</option>
+                <option value="間食">間食</option>
+              </select>
+            </div>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">✅ 記録を保存</button>
+          <button type="button" class="btn btn-secondary" onclick="analyzePhoto()">📸 写真からAI分析</button>
+        </form>
+      </div>
+      
+      <!-- 今日の食事一覧 -->
+      <div class="section">
+        <div class="section-title">今日の食事</div>
+        <div id="mealList">
+          <div class="empty-state">
+            <div class="empty-icon">🍽️</div>
+            <div class="empty-text">まだ記録がありません</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 運動ビュー -->
+    <div class="view" id="exercise">
+      <!-- 運動記録フォーム -->
+      <div class="section">
+        <div class="section-title">🏃 運動を記録</div>
+        
+        <form id="exerciseForm">
+          <div class="form-group">
+            <label class="form-label">運動の種類を選択</label>
+            <div class="exercise-grid" id="exerciseGrid">
+              <div class="exercise-btn" data-type="walking" data-met="3.5">
+                <div class="exercise-btn-icon">🚶</div>
+                <div class="exercise-btn-name">ウォーキング</div>
+                <div class="exercise-btn-cal">3.5 METs</div>
+              </div>
+              <div class="exercise-btn" data-type="running" data-met="7.0">
+                <div class="exercise-btn-icon">🏃</div>
+                <div class="exercise-btn-name">ランニング</div>
+                <div class="exercise-btn-cal">7.0 METs</div>
+              </div>
+              <div class="exercise-btn" data-type="cycling" data-met="6.0">
+                <div class="exercise-btn-icon">🚴</div>
+                <div class="exercise-btn-name">サイクリング</div>
+                <div class="exercise-btn-cal">6.0 METs</div>
+              </div>
+              <div class="exercise-btn" data-type="swimming" data-met="8.0">
+                <div class="exercise-btn-icon">🏊</div>
+                <div class="exercise-btn-name">水泳</div>
+                <div class="exercise-btn-cal">8.0 METs</div>
+              </div>
+              <div class="exercise-btn" data-type="yoga" data-met="2.5">
+                <div class="exercise-btn-icon">🧘</div>
+                <div class="exercise-btn-name">ヨガ</div>
+                <div class="exercise-btn-cal">2.5 METs</div>
+              </div>
+              <div class="exercise-btn" data-type="gym" data-met="5.0">
+                <div class="exercise-btn-icon">💪</div>
+                <div class="exercise-btn-name">筋トレ</div>
+                <div class="exercise-btn-cal">5.0 METs</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">⏱️ 運動時間（分）</label>
+            <input type="number" class="form-input" id="exerciseMinutes" placeholder="30" required>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">⚖️ 体重（kg）※計算用</label>
+            <input type="number" class="form-input" id="exerciseWeight" step="0.1" placeholder="60">
+          </div>
+          
+          <button type="submit" class="btn btn-primary">✅ 記録を保存</button>
+        </form>
+      </div>
+      
+      <!-- 今日の運動一覧 -->
+      <div class="section">
+        <div class="section-title">今日の運動</div>
+        <div style="margin-bottom: 12px;">
+          <button style="width: 100%; padding: 10px; background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;" onclick="window.location.href='canvassing.html'">
+            🗺️ 個別訪問でGPS歩行を記録
+          </button>
+        </div>
+        <div id="exerciseList">
+          <div class="empty-state">
+            <div class="empty-icon">🏃</div>
+            <div class="empty-text">まだ記録がありません</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 体重ビュー -->
+    <div class="view" id="weight">
+      <!-- 体重記録 -->
+      <div class="section">
+        <div class="section-title">⚖️ 体重を記録</div>
+        
+        <form id="weightForm">
+          <div class="form-group">
+            <label class="form-label">今日の体重（kg）</label>
+            <input type="number" class="form-input" id="todayWeight" step="0.1" placeholder="65.5" required>
+          </div>
+          
+          <button type="submit" class="btn btn-primary">✅ 記録を保存</button>
+        </form>
+      </div>
+      
+      <!-- 体重推移グラフ -->
+      <div class="section">
+        <div class="section-title">体重推移（7日間）</div>
+        <div class="chart-container">
+          <canvas id="weightChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- トースト -->
+  <div class="toast" id="toast"></div>
+  
+  <!-- ローディング -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+  </div>
+  
+  <script>
+    // ============================================================
+    // 設定（ここを環境に合わせて変更）
+    // ============================================================
+    const LIFF_ID   = 'YOUR_DIET_LIFF_ID_HERE'; // ← LINE DevelopersでLIFFを作成後、IDを入力
+    const GAS_URL   = 'https://script.google.com/macros/s/AKfycbxjjLVWPU06BgmwtYrnyjC8LIuV54mzG0YMa_SkWuL5yN8y6m9GEbM_C0cRtX7UlWOM/exec';
+
+    // ============================================================
+    // グローバル変数
+    // ============================================================
+    let meals = [];
+    let exercises = [];
+    let weights = [];
+    let selectedExerciseType = null;
+    let selectedExerciseMET = null;
+    let currentPhotoData = null;
+    let lineUserId = '';
+    
+    // === LIFF初期化 ===
+    function initLIFF() {
+      if (typeof liff === 'undefined' || !LIFF_ID || LIFF_ID === 'YOUR_DIET_LIFF_ID_HERE') return;
+      liff.init({ liffId: LIFF_ID })
+        .then(() => {
+          if (liff.isInClient() || liff.isLoggedIn()) {
+            return liff.getProfile();
+          }
+          return null;
+        })
+        .then(profile => {
+          if (profile && profile.userId) {
+            lineUserId = profile.userId;
+          }
+        })
+        .catch(err => console.warn('LIFF init 失敗:', err));
+    }
+
+    // === 初期化 ===
+    function init() {
+      initLIFF();
+      loadData();
+      importVisitData(); // 個別訪問アプリのGPS歩行データを自動インポート
+      setupEventListeners();
+      updateHeaderDate();
+      updateCalorySummary();
+      updateMealList();
+      updateExerciseList();
+      initWeightChart();
+      renderWeightChart();
+    }
+    
+    // === ページ表示時に毎回GPS歩行データをリフレッシュ ===
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        // ページがアクティブになったら再インポート
+        importVisitData();
+        updateCalorySummary();
+        updateExerciseList();
+      }
+    });
+    
+    // === イベントリスナー ===
+    function setupEventListeners() {
+      // タブ切り替え
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          
+          const view = btn.dataset.view;
+          document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+          document.getElementById(view).classList.add('active');
+          
+          if (view === 'weight') {
+            renderWeightChart();
+          }
+        });
+      });
+      
+      // 食事フォーム
+      document.getElementById('mealForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveMeal();
+      });
+      
+      // 運動フォーム
+      document.getElementById('exerciseForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveExercise();
+      });
+      
+      // 体重フォーム
+      document.getElementById('weightForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveWeight();
+      });
+      
+      // 写真選択
+      document.getElementById('mealPhoto').addEventListener('change', handlePhotoSelect);
+      
+      // 運動選択
+      document.querySelectorAll('.exercise-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.exercise-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          selectedExerciseType = btn.dataset.type;
+          selectedExerciseMET = parseFloat(btn.dataset.met);
+        });
+      });
+      
+      // デフォルト体重設定
+      const lastWeight = weights[0]?.weight || 60;
+      document.getElementById('exerciseWeight').value = lastWeight;
+    }
+    
+    // === ヘッダー日付更新 ===
+    function updateHeaderDate() {
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('ja-JP', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long'
+      });
+      document.getElementById('headerDate').textContent = dateStr;
+    }
+    
+    // === データ読み込み ===
+    function loadData() {
+      const savedMeals = localStorage.getItem('dietMeals');
+      if (savedMeals) meals = JSON.parse(savedMeals);
+      
+      const savedExercises = localStorage.getItem('dietExercises');
+      if (savedExercises) exercises = JSON.parse(savedExercises);
+      
+      const savedWeights = localStorage.getItem('dietWeights');
+      if (savedWeights) weights = JSON.parse(savedWeights);
+    }
+    
+    // === データ保存 ===
+    function saveData() {
+      localStorage.setItem('dietMeals', JSON.stringify(meals));
+      localStorage.setItem('dietExercises', JSON.stringify(exercises));
+      localStorage.setItem('dietWeights', JSON.stringify(weights));
+    }
+    
+    // === 個別訪問アプリの歩行データを自動インポート ===
+    function importVisitData() {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const lastRecordDate = localStorage.getItem('lastRecordDate');
+        
+        // 本日のデータのみインポート
+        if (lastRecordDate !== new Date().toDateString()) {
+          return; // 個別訪問アプリが本日のデータを記録していない
+        }
+        
+        // 本日の歩行距離を取得（メートル単位）
+        const todayDistanceMeters = parseFloat(localStorage.getItem('todayDistance') || '0');
+        const todayDistanceKm = todayDistanceMeters / 1000; // kmに変換
+        
+        if (todayDistanceKm <= 0) {
+          return; // 歩行距離がゼロなら何もしない
+        }
+        
+        // 既に本日のGPS歩行記録があるかチェック（重複防止）
+        const existingGPSExercise = exercises.find(ex => 
+          ex.date === today && 
+          ex.type === 'gps-walking'
+        );
+        
+        // 歩行距離から運動時間を推定（平均速度 4km/h と仮定）
+        const estimatedMinutes = Math.round((todayDistanceKm / 4) * 60); // 時間 = 距離 / 速度
+        
+        if (estimatedMinutes <= 0) {
+          return;
+        }
+        
+        // カロリー計算（ウォーキング 3.5 MET）
+        const weight = weights[0]?.weight || parseFloat(localStorage.getItem('userWeight')) || 60;
+        const calories = Math.round(3.5 * weight * (estimatedMinutes / 60) * 1.05);
+        
+        if (existingGPSExercise) {
+          // 既存記録を更新
+          existingGPSExercise.name = `🚶 GPS歩行（${todayDistanceKm.toFixed(1)}km）`;
+          existingGPSExercise.minutes = estimatedMinutes;
+          existingGPSExercise.calories = calories;
+          console.log(`✅ GPS歩行データを更新: ${todayDistanceKm.toFixed(1)}km, ${estimatedMinutes}分, ${calories}kcal`);
+        } else {
+          // 運動記録として新規登録
+          const gpsExercise = {
+            id: `gps_${Date.now()}`,
+            date: today,
+            timestamp: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+            type: 'gps-walking',
+            name: `🚶 GPS歩行（${todayDistanceKm.toFixed(1)}km）`,
+            minutes: estimatedMinutes,
+            calories: calories
+          };
+          
+          exercises.unshift(gpsExercise);
+          console.log(`✅ GPS歩行データを新規登録: ${todayDistanceKm.toFixed(1)}km, ${estimatedMinutes}分, ${calories}kcal`);
+        }
+        
+        saveData();
+      } catch (error) {
+        console.error('⚠️ GPS歩行データインポートエラー:', error);
+      }
+    }
+    
+    // === カロリーサマリー更新 ===
+    function updateCalorySummary() {
+      const today = new Date().toISOString().split('T')[0];
+      
+      const todayMeals = meals.filter(m => m.date === today);
+      const todayExercises = exercises.filter(e => e.date === today);
+      
+      const totalIntake = todayMeals.reduce((sum, m) => sum + m.calories, 0);
+      const totalBurn = todayExercises.reduce((sum, e) => sum + e.calories, 0);
+      const balance = totalIntake - totalBurn;
+      
+      document.getElementById('totalIntake').textContent = totalIntake;
+      document.getElementById('totalBurn').textContent = totalBurn;
+      document.getElementById('balance').textContent = balance > 0 ? '+' + balance : balance;
+      
+      // 色変更
+      const balanceEl = document.getElementById('balance');
+      if (balance > 500) {
+        balanceEl.style.color = 'var(--red)';
+      } else if (balance < -500) {
+        balanceEl.style.color = 'var(--blue)';
+      } else {
+        balanceEl.style.color = 'var(--text-dark)';
+      }
+    }
+    
+    // === 写真選択処理 ===
+    function handlePhotoSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        currentPhotoData = event.target.result;
+        
+        const uploadEl = document.getElementById('photoUpload');
+        uploadEl.classList.add('has-image');
+        uploadEl.innerHTML = `<img src="${currentPhotoData}" class="photo-preview" alt="食事写真">`;
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    // === AI写真分析 ===
+    async function analyzePhoto() {
+      if (!currentPhotoData) {
+        showToast('❌ 写真を選択してください');
+        return;
+      }
+      
+      showLoading();
+      
+      try {
+        // GASエンドポイント（実装済みのCode.gsを使用）
+        const GAS_ENDPOINT = GAS_URL;
+
+        if (!GAS_ENDPOINT) {
+          // デモモード
+          hideLoading();
+          document.getElementById('mealName').value = '唐揚げ定食';
+          document.getElementById('mealCalories').value = 850;
+          showToast('🤖 AIが分析しました（デモ）');
+          return;
+        }
+        
+        const response = await fetch(GAS_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'analyzeMeal',
+            image: currentPhotoData.split(',')[1] // Base64部分のみ
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          document.getElementById('mealName').value = data.name;
+          document.getElementById('mealCalories').value = data.calories;
+          showToast('🤖 AIが分析しました');
+        } else {
+          throw new Error(data.error);
+        }
+      } catch (error) {
+        console.error('AI Analysis Error:', error);
+        showToast('❌ 分析に失敗しました');
+      } finally {
+        hideLoading();
+      }
+    }
+    
+    // === AIテキスト分析（メニュー名からカロリー計算） ===
+    async function analyzeText() {
+      const mealName = document.getElementById('mealName').value.trim();
+      
+      if (!mealName) {
+        showToast('❌ メニュー名を入力してください');
+        return;
+      }
+      
+      showLoading();
+      
+      try {
+        // GASエンドポイント
+        const GAS_ENDPOINT = GAS_URL;
+
+        if (!GAS_ENDPOINT) {
+          // デモモード
+          hideLoading();
+          const demoCalories = {
+            'ラーメン': 500,
+            '定食': 850,
+            '唐揚げ': 850,
+            'カレー': 750,
+            'ハンバーガー': 550,
+            'パスタ': 600,
+            'おにぎり': 200,
+            'サンドイッチ': 350
+          };
+          
+          // キーワードマッチング
+          let calories = 500; // デフォルト
+          for (const [key, cal] of Object.entries(demoCalories)) {
+            if (mealName.includes(key)) {
+              calories = cal;
+              break;
+            }
+          }
+          
+          document.getElementById('mealCalories').value = calories;
+          showToast(`🤖 「${mealName}」のカロリーを推定しました（デモ）`);
+          return;
+        }
+        
+        const response = await fetch(GAS_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'analyzeMealText',
+            text: mealName
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          document.getElementById('mealCalories').value = data.calories;
+          showToast(`🤖 「${mealName}」のカロリーを推定しました`);
+        } else {
+          throw new Error(data.error);
+        }
+      } catch (error) {
+        console.error('AI Text Analysis Error:', error);
+        showToast('❌ 分析に失敗しました');
+      } finally {
+        hideLoading();
+      }
+    }
+    
+    // === 食事保存 ===
+    function saveMeal() {
+      const name = document.getElementById('mealName').value.trim();
+      const calories = parseInt(document.getElementById('mealCalories').value);
+      const time = document.getElementById('mealTime').value;
+      
+      if (!name || !calories) {
+        showToast('❌ メニュー名とカロリーを入力してください');
+        return;
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+      
+      const meal = {
+        id: Date.now(),
+        date: today,
+        time: time,
+        timestamp: now,
+        name: name,
+        calories: calories,
+        photo: currentPhotoData
+      };
+      
+      meals.unshift(meal);
+      saveData();
+      
+      // フォームリセット
+      document.getElementById('mealForm').reset();
+      currentPhotoData = null;
+      document.getElementById('photoUpload').classList.remove('has-image');
+      document.getElementById('photoUpload').innerHTML = `
+        <div class="photo-icon">📷</div>
+        <div class="photo-text">写真を撮る / 選択</div>
+        <div class="photo-text" style="font-size: 12px; margin-top: 4px;">AIが自動でカロリー計算します</div>
+      `;
+      
+      updateCalorySummary();
+      updateMealList();
+      showToast('✅ 食事を記録しました');
+    }
+    
+    // === 食事リスト更新 ===
+    function updateMealList() {
+      const container = document.getElementById('mealList');
+      const today = new Date().toISOString().split('T')[0];
+      const todayMeals = meals.filter(m => m.date === today);
+      
+      if (todayMeals.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🍽️</div>
+            <div class="empty-text">まだ記録がありません</div>
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = todayMeals.map(meal => `
+        <div class="meal-card">
+          ${meal.photo ? `<img src="${meal.photo}" class="meal-image" alt="${meal.name}">` : '<div class="meal-image">📷</div>'}
+          <div class="meal-info">
+            <div class="meal-time">${meal.time} ${meal.timestamp}</div>
+            <div class="meal-name">${meal.name}</div>
+            <div class="meal-calories">${meal.calories} kcal</div>
+          </div>
+          <div class="meal-actions">
+            <button class="icon-btn" onclick="deleteMeal(${meal.id})">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    
+    // === 食事削除 ===
+    function deleteMeal(id) {
+      if (!confirm('この食事記録を削除しますか？')) return;
+      
+      meals = meals.filter(m => m.id !== id);
+      saveData();
+      updateCalorySummary();
+      updateMealList();
+      showToast('🗑️ 削除しました');
+    }
+    
+    // === 運動保存 ===
+    function saveExercise() {
+      if (!selectedExerciseType) {
+        showToast('❌ 運動の種類を選択してください');
+        return;
+      }
+      
+      const minutes = parseInt(document.getElementById('exerciseMinutes').value);
+      const weight = parseFloat(document.getElementById('exerciseWeight').value);
+      
+      if (!minutes || !weight) {
+        showToast('❌ 運動時間と体重を入力してください');
+        return;
+      }
+      
+      // カロリー計算: METs × 体重(kg) × 時間(h) × 1.05
+      const hours = minutes / 60;
+      const calories = Math.round(selectedExerciseMET * weight * hours * 1.05);
+      
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+      
+      const exerciseNames = {
+        walking: 'ウォーキング',
+        running: 'ランニング',
+        cycling: 'サイクリング',
+        swimming: '水泳',
+        yoga: 'ヨガ',
+        gym: '筋トレ'
+      };
+      
+      const exercise = {
+        id: Date.now(),
+        date: today,
+        timestamp: now,
+        type: selectedExerciseType,
+        name: exerciseNames[selectedExerciseType],
+        minutes: minutes,
+        calories: calories
+      };
+      
+      exercises.unshift(exercise);
+      saveData();
+      
+      // フォームリセット
+      document.getElementById('exerciseForm').reset();
+      document.getElementById('exerciseWeight').value = weight;
+      document.querySelectorAll('.exercise-btn').forEach(b => b.classList.remove('selected'));
+      selectedExerciseType = null;
+      selectedExerciseMET = null;
+      
+      updateCalorySummary();
+      updateExerciseList();
+      showToast(`✅ 運動を記録しました（${calories} kcal消費）`);
+    }
+    
+    // === 運動リスト更新 ===
+    function updateExerciseList() {
+      const container = document.getElementById('exerciseList');
+      const today = new Date().toISOString().split('T')[0];
+      const todayExercises = exercises.filter(e => e.date === today);
+      
+      if (todayExercises.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🏃</div>
+            <div class="empty-text">まだ記録がありません</div>
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = todayExercises.map(ex => {
+        const isGPS = ex.type === 'gps-walking';
+        const deleteBtn = isGPS 
+          ? `<button class="icon-btn" onclick="deleteExercise('${ex.id}')">🗑️</button>`
+          : `<button class="icon-btn" onclick="deleteExercise(${ex.id})">🗑️</button>`;
+        
+        return `
+          <div class="exercise-item ${isGPS ? 'gps-exercise' : ''}">
+            <div class="exercise-info">
+              <div class="exercise-name">${ex.name}</div>
+              <div class="exercise-time">${ex.minutes}分 - ${ex.timestamp}</div>
+            </div>
+            <div class="exercise-calories">-${ex.calories} kcal</div>
+            ${deleteBtn}
+          </div>
+        `;
+      }).join('');
+    }
+    
+    // === 運動削除 ===
+    function deleteExercise(id) {
+      if (!confirm('この運動記録を削除しますか？')) return;
+      
+      // IDが文字列の場合と数値の場合の両方に対応
+      exercises = exercises.filter(e => e.id !== id && e.id !== String(id) && String(e.id) !== String(id));
+      saveData();
+      updateCalorySummary();
+      updateExerciseList();
+      showToast('🗑️ 削除しました');
+    }
+    
+    // === 個別訪問データ自動インポート（重複版削除） ===
+    // この関数は上部（817行目付近）に統合されました
+      }
+    }
+    
+    // === 体重保存 ===
+    function saveWeight() {
+      const weight = parseFloat(document.getElementById('todayWeight').value);
+      
+      if (!weight) {
+        showToast('❌ 体重を入力してください');
+        return;
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      
+      // 今日の記録を削除
+      weights = weights.filter(w => w.date !== today);
+      
+      weights.unshift({
+        id: Date.now(),
+        date: today,
+        weight: weight
+      });
+      
+      saveData();
+      document.getElementById('weightForm').reset();
+      renderWeightChart();
+      showToast('✅ 体重を記録しました');
+    }
+    
+    // === 体重グラフ ===
+    let weightChart;
+    
+    function initWeightChart() {
+      const ctx = document.getElementById('weightChart').getContext('2d');
+      weightChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: '体重 (kg)',
+            data: [],
+            borderColor: 'rgb(156, 39, 176)',
+            backgroundColor: 'rgba(156, 39, 176, 0.1)',
+            tension: 0.4,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: { beginAtZero: false }
+          }
+        }
+      });
+    }
+    
+    function renderWeightChart() {
+      const last7Days = weights.slice(0, 7).reverse();
+      const labels = last7Days.map(w => {
+        const date = new Date(w.date);
+        return `${date.getMonth() + 1}/${date.getDate()}`;
+      });
+      const data = last7Days.map(w => w.weight);
+      
+      weightChart.data.labels = labels;
+      weightChart.data.datasets[0].data = data;
+      weightChart.update();
+    }
+    
+    // === ローディング ===
+    function showLoading() {
+      document.getElementById('loading').classList.add('show');
+    }
+    
+    function hideLoading() {
+      document.getElementById('loading').classList.remove('show');
+    }
+    
+    // === トースト ===
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+    
+    // === 初期化実行 ===
+    init();
+  </script>
+</body>
+</html>
