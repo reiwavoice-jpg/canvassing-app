@@ -800,7 +800,11 @@
           const view = btn.dataset.view;
           document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
           document.getElementById(view).classList.add('active');
-          
+
+          // タブ切り替え時はページトップにスクロール
+          window.scrollTo({ top: 0, behavior: 'instant' });
+          document.querySelector('.content') && (document.querySelector('.content').scrollTop = 0);
+
           if (view === 'weight') {
             renderWeightChart();
           }
