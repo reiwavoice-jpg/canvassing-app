@@ -153,28 +153,33 @@
       font-weight: 600;
     }
     
-    /* コンテンツエリア：残りの高さをすべて使う */
+    /* スワイプコンテナ：横並びで全ページを配置 */
     .content {
       flex: 1;
-      overflow: hidden;
-      position: relative;
+      display: flex;
+      overflow-x: scroll;
+      overflow-y: hidden;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none; /* Firefox */
     }
+    .content::-webkit-scrollbar { display: none; } /* Chrome/Safari */
 
-    /* 各ビューは絶対配置でコンテンツ全体を覆い、独自スクロール */
+    /* 各ビューは横幅100%・独自縦スクロール */
     .view {
-      display: none;
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
+      min-width: 100%;
+      width: 100%;
+      scroll-snap-align: start;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       padding: 16px;
-      padding-bottom: 20px;
+      padding-bottom: 24px;
       background: var(--bg-gray);
+      box-sizing: border-box;
     }
 
-    .view.active {
-      display: block;
-    }
+    /* activeクラスは不要だが念のため残す */
+    .view.active { /* no-op */ }
     
     /* セクション */
     .section {
@@ -813,35 +818,41 @@
       }
     });
     
-    // === タブ切り替え（グローバル関数）===
+    // === タブ切り替え（スワイプ対応） ===
+    var TAB_VIEWS = ['meals', 'exercise', 'weight'];
+
     function switchTab(view) {
-      // タブボタンのactive切り替え
-      var tabIds = ['meals', 'exercise', 'weight'];
-      for (var i = 0; i < tabIds.length; i++) {
-        var btn = document.getElementById('tab-' + tabIds[i]);
-        if (!btn) continue;
-        btn.className = tabIds[i] === view ? 'tab-btn active' : 'tab-btn';
+      var idx = TAB_VIEWS.indexOf(view);
+      if (idx < 0) return;
+      var container = document.querySelector('.content');
+      if (!container) return;
+      // 横スクロールで目的ページへ移動
+      container.scrollTo({ left: idx * container.offsetWidth, behavior: 'smooth' });
+      updateTabIndicator(idx);
+    }
+
+    function updateTabIndicator(idx) {
+      for (var i = 0; i < TAB_VIEWS.length; i++) {
+        var btn = document.getElementById('tab-' + TAB_VIEWS[i]);
+        if (btn) btn.className = i === idx ? 'tab-btn active' : 'tab-btn';
       }
-      // ビューのactive切り替え
-      for (var j = 0; j < tabIds.length; j++) {
-        var el = document.getElementById(tabIds[j]);
-        if (!el) continue;
-        el.className = tabIds[j] === view ? 'view active' : 'view';
-      }
-      // アクティブビューのスクロールをトップに戻す
-      try {
-        var activeEl = document.getElementById(view);
-        if (activeEl) activeEl.scrollTop = 0;
-      } catch(e) {}
-      // 体重グラフ更新
-      if (view === 'weight') {
+      if (TAB_VIEWS[idx] === 'weight') {
         try { renderWeightChart(); } catch(e) {}
       }
     }
 
     // === イベントリスナー ===
     function setupEventListeners() {
-      
+
+      // スワイプでタブインジケーター更新
+      var container = document.querySelector('.content');
+      if (container) {
+        container.addEventListener('scroll', function() {
+          var idx = Math.round(container.scrollLeft / container.offsetWidth);
+          updateTabIndicator(idx);
+        });
+      }
+
       // 食事フォーム
       document.getElementById('mealForm').addEventListener('submit', (e) => {
         e.preventDefault();
