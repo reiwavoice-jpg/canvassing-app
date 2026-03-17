@@ -294,18 +294,19 @@
     <div class="section">
       <div class="section-title">📸 食事を記録</div>
       <form id="mealForm">
-        <!-- カメラ直接起動 -->
-        <input type="file" id="mealPhotoCamera" accept="image/*" capture="environment" style="display:none;">
-        <!-- アルバム選択 -->
-        <input type="file" id="mealPhotoAlbum"  accept="image/*" style="display:none;">
+        <!-- labelで直接紐付け（LIFFでも確実に動く）-->
+        <input type="file" id="mealPhotoCamera" accept="image/*" capture="environment"
+               style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
+        <input type="file" id="mealPhotoAlbum"  accept="image/*"
+               style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
         <div class="form-group">
           <div class="photo-preview-area" id="photoPreviewArea">
             <div class="photo-icon">📷</div>
             <div class="photo-text">下のボタンから写真を追加</div>
           </div>
           <div class="photo-btns">
-            <button type="button" class="photo-btn camera" onclick="document.getElementById('mealPhotoCamera').click()">📷 カメラで撮影</button>
-            <button type="button" class="photo-btn"        onclick="document.getElementById('mealPhotoAlbum').click()">🖼️ アルバムから選択</button>
+            <label for="mealPhotoCamera" class="photo-btn camera">📷 カメラで撮影</label>
+            <label for="mealPhotoAlbum"  class="photo-btn">🖼️ アルバムから選択</label>
           </div>
         </div>
         <div class="form-group">
@@ -754,33 +755,14 @@
     }
 
     // ============================================================
-    // AI分析（テキスト）- GAS失敗時はローカルDBにフォールバック
+    // AI分析（テキスト）- ローカルDBで即時推定
     // ============================================================
     function analyzeText() {
       var name = document.getElementById('mealName').value.trim();
       if (!name) { showToast('❌ メニュー名を入力してください'); return; }
-      showLoading();
-      fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'analyzeMealText', text: name })
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.success && d.calories) {
-          document.getElementById('mealCalories').value = d.calories;
-          showToast('🤖 「' + name + '」のカロリーを推定しました');
-        } else {
-          throw new Error('GAS返答なし');
-        }
-      })
-      .catch(function() {
-        // GAS失敗 → ローカルDBで推定
-        var cal = estimateCaloriesLocally(name);
-        document.getElementById('mealCalories').value = cal;
-        showToast('📊 「' + name + '」 約' + cal + 'kcal（ローカル推定）');
-      })
-      .finally(function() { hideLoading(); });
+      var cal = estimateCaloriesLocally(name);
+      document.getElementById('mealCalories').value = cal;
+      showToast('📊 「' + name + '」 約' + cal + 'kcal');
     }
 
     // ============================================================
