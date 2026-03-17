@@ -782,8 +782,8 @@
       updateCalorySummary();
       updateMealList();
       updateExerciseList();
-      initWeightChart();
-      renderWeightChart();
+      try { initWeightChart(); } catch(e) { console.warn('chart init error:', e); }
+      try { renderWeightChart(); } catch(e) { console.warn('chart render error:', e); }
     }
     
     // === ページ表示時に毎回GPS歩行データをリフレッシュ ===
@@ -799,20 +799,23 @@
     // === タブ切り替え（グローバル関数）===
     function switchTab(view) {
       // タブボタンのactive切り替え
-      ['meals', 'exercise', 'weight'].forEach(function(v) {
-        var btn = document.getElementById('tab-' + v);
-        if (btn) btn.classList.toggle('active', v === view);
-      });
+      var tabIds = ['meals', 'exercise', 'weight'];
+      for (var i = 0; i < tabIds.length; i++) {
+        var btn = document.getElementById('tab-' + tabIds[i]);
+        if (!btn) continue;
+        btn.className = tabIds[i] === view ? 'tab-btn active' : 'tab-btn';
+      }
       // ビューのactive切り替え
-      ['meals', 'exercise', 'weight'].forEach(function(v) {
-        var el = document.getElementById(v);
-        if (el) el.classList.toggle('active', v === view);
-      });
+      for (var j = 0; j < tabIds.length; j++) {
+        var el = document.getElementById(tabIds[j]);
+        if (!el) continue;
+        el.className = tabIds[j] === view ? 'view active' : 'view';
+      }
       // ページトップにスクロール
-      window.scrollTo(0, 0);
+      try { window.scrollTo(0, 0); } catch(e) {}
       // 体重グラフ更新
       if (view === 'weight') {
-        renderWeightChart();
+        try { renderWeightChart(); } catch(e) {}
       }
     }
 
