@@ -670,30 +670,42 @@
     }
 
     // ============================================================
-    // 写真処理
+    // 写真処理（canvas で800px以下に圧縮してからdata URLに変換）
     // ============================================================
     function handlePhotoSelect(e) {
       var file = e.target.files[0];
       if (!file) return;
       var reader = new FileReader();
       reader.onload = function(ev) {
-        currentPhotoData = ev.target.result;
-        var el = document.getElementById('photoPreviewArea');
-        el.classList.add('has-image');
-        el.innerHTML = '<img src="' + currentPhotoData + '" class="photo-preview" alt="食事写真">';
+        var img = new Image();
+        img.onload = function() {
+          var MAX = 800;
+          var w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else       { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          currentPhotoData = canvas.toDataURL('image/jpeg', 0.75); // 75%品質
+          var el = document.getElementById('photoPreviewArea');
+          el.classList.add('has-image');
+          el.innerHTML = '<img src="' + currentPhotoData + '" class="photo-preview" alt="食事写真">';
+        };
+        img.src = ev.target.result;
       };
       reader.readAsDataURL(file);
     }
 
     // ============================================================
-    // AI分析（写真）
+    // AI分析（写真）- 圧縮済みbase64をGASに送信
     // ============================================================
     function analyzePhoto() {
       if (!currentPhotoData) { showToast('❌ 写真を選択してください'); return; }
       showLoading();
       fetch(GAS_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'analyzeMeal', image: currentPhotoData.split(',')[1] })
       })
       .then(function(r) { return r.json(); })
@@ -755,14 +767,30 @@
     }
 
     // ============================================================
-    // AI分析（テキスト）- ローカルDBで即時推定
+    // AI分析（テキスト）- GAS Gemini優先、失敗時はローカルDBにフォールバック
     // ============================================================
     function analyzeText() {
       var name = document.getElementById('mealName').value.trim();
       if (!name) { showToast('❌ メニュー名を入力してください'); return; }
-      var cal = estimateCaloriesLocally(name);
-      document.getElementById('mealCalories').value = cal;
-      showToast('📊 「' + name + '」 約' + cal + 'kcal');
+      showLoading();
+      fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'analyzeMealText', text: name })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success && d.calories) {
+          document.getElementById('mealCalories').value = d.calories;
+          showToast('🤖 AIが「' + name + '」を' + d.calories + 'kcalと推定しました');
+        } else { throw new Error('no result'); }
+      })
+      .catch(function() {
+        // GAS失敗 → ローカルDBにフォールバック
+        var cal = estimateCaloriesLocally(name);
+        document.getElementById('mealCalories').value = cal;
+        showToast('📊 「' + name + '」 約' + cal + 'kcal（ローカル推定）');
+      })
+      .finally(function() { hideLoading(); });
     }
 
     // ============================================================
@@ -933,7 +961,6 @@
       data.userId = lineUserId || '';
       fetch(GAS_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(Object.assign({ action: 'saveDiet' }, data))
       })
       .then(function(r) { return r.json(); })
