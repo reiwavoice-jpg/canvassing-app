@@ -505,6 +505,34 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading p { margin-top: 12px; color: #666; font-size: 14px; }
+
+    /* ===== 足跡ログ ===== */
+    .track-item {
+      background: #fff;
+      border: 1px solid #e8e8e8;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .track-item-date {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1a2c5b;
+      margin-bottom: 4px;
+    }
+    .track-item-meta {
+      display: flex;
+      gap: 14px;
+      font-size: 13px;
+      color: #666;
+    }
+    .track-color-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -625,7 +653,38 @@
   <button class="nav-btn" data-view="dashboard">
     <span class="nav-icon">📊</span>情勢
   </button>
+  <button class="nav-btn" data-view="track">
+    <span class="nav-icon">👣</span>足跡
+  </button>
 </nav>
+
+<!-- ===== 足跡ログパネル ===== -->
+<div class="panel" id="panel-track">
+  <div class="panel-header">👣 足跡ログ</div>
+  <div class="panel-body">
+    <div class="filter-bar">
+      <button class="filter-btn active" data-track-filter="today">今日</button>
+      <button class="filter-btn" data-track-filter="week">今週</button>
+      <button class="filter-btn" data-track-filter="month">今月</button>
+      <button class="filter-btn" data-track-filter="period">期間指定</button>
+    </div>
+    <div class="period-row" id="track-period-row" style="display:none">
+      <input type="date" id="track-start-date">
+      <span>〜</span>
+      <input type="date" id="track-end-date">
+      <button class="period-apply" onclick="applyTrackFilter()">適用</button>
+    </div>
+    <div id="track-summary-box" style="background:#f0f9ff;border-radius:12px;padding:12px 16px;margin:10px 0 6px;display:none">
+      <div style="font-size:13px;color:#555;margin-bottom:4px">この期間の合計</div>
+      <div style="display:flex;gap:20px;align-items:center">
+        <div><span style="font-size:22px;font-weight:700;color:#1a2c5b" id="track-total-dist">0km</span></div>
+        <div><span style="font-size:13px;color:#888" id="track-total-sessions">0回</span></div>
+      </div>
+    </div>
+    <button id="show-track-map-btn" onclick="showTrackOnMap()" style="display:none;width:100%;padding:10px;margin:4px 0 10px;background:#1a2c5b;color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">🗺️ 地図で軌跡を表示</button>
+    <div id="track-list" style="padding-bottom:8px"></div>
+  </div>
+</div>
 
 <!-- ===== トースト ===== -->
 <div id="toast"></div>
@@ -798,9 +857,13 @@ var currentLat    = null;
 var currentLng    = null;
 var gpsWatchId    = null;
 var isRecording   = false;
-var walkingPath   = [];
-var totalDistance = 0;
-var visitCount    = 0;
+var walkingPath        = [];
+var totalDistance      = 0;
+var visitCount         = 0;
+var recordingStartTime = null;
+var trackAutoSaveTimer = null;
+var trackPathLayers    = [];   // 地図上の軌跡レイヤー（表示中のもの）
+var currentTrackFilter = 'today';
 
 var myMarker      = null;
 var myCircle      = null;
@@ -848,6 +911,7 @@ function init() {
   loadTodayDistance();
   startGPS();
   loadVisitHistory();  // GASから履歴を取得
+  initTrackPanel();
   setTimeout(function() {
     document.getElementById('loading').style.display = 'none';
   }, 1800);
@@ -909,6 +973,11 @@ function initNavigation() {
         distOverlay.style.display = 'none';
         document.getElementById('panel-dashboard').classList.add('active');
         updateDashboard();
+      } else if (view === 'track') {
+        fab.classList.add('hidden');
+        distOverlay.style.display = 'none';
+        document.getElementById('panel-track').classList.add('active');
+        renderTrackPanel(currentTrackFilter);
       }
     });
   });
@@ -936,6 +1005,7 @@ function startRecording() {
   walkingPath    = [];
   lastRecordedPos  = null;
   lastRecordedTime = null;
+  recordingStartTime = new Date().toISOString();
 
   // 日付が変わっていれば距離をリセット
   var today = new Date().toDateString();
@@ -949,6 +1019,12 @@ function startRecording() {
     onGPSUpdate, onGPSError,
     { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
   );
+
+  // 30秒ごとに自動保存（アプリ強制終了対策）
+  trackAutoSaveTimer = setInterval(function() {
+    if (walkingPath.length >= 2) autoSaveTrackSession();
+  }, 30000);
+
   showToast('GPS記録を開始しました');
 }
 
@@ -957,19 +1033,22 @@ function stopRecording() {
     navigator.geolocation.clearWatch(gpsWatchId);
     gpsWatchId = null;
   }
+  if (trackAutoSaveTimer) { clearInterval(trackAutoSaveTimer); trackAutoSaveTimer = null; }
   isRecording = false;
   var fab = document.getElementById('fab');
   fab.textContent = '▶️';
   fab.classList.remove('recording');
 
-  if (walkingPath.length > 0) {
+  if (walkingPath.length >= 2) {
+    saveTrackSession(walkingPath, totalDistance, recordingStartTime, new Date().toISOString());
     var km  = (totalDistance / 1000).toFixed(2);
     var cal = calcCalories(totalDistance);
     saveTodayDistance();
-    showToast('GPS停止 ' + km + 'km / ' + cal + 'kcal');
+    showToast('GPS停止 ' + km + 'km / ' + cal + 'kcal（足跡を保存しました）');
   } else {
     showToast('GPS記録を停止しました');
   }
+  recordingStartTime = null;
 }
 
 function onGPSUpdate(pos) {
@@ -1673,6 +1752,204 @@ function calcCalories(distM) {
 function saveTodayDistance() {
   localStorage.setItem('todayDistance',  totalDistance);
   localStorage.setItem('lastRecordDate', new Date().toDateString());
+}
+
+// ============================================================
+// 足跡ログ: 保存・読込・表示
+// ============================================================
+
+// ローカルに走行セッションを保存
+function saveTrackSession(path, distM, startISO, endISO) {
+  var sessions = loadAllTrackSessions();
+  var dateStr  = (startISO || endISO || new Date().toISOString()).substring(0, 10); // YYYY-MM-DD
+  // 同じ開始時刻のセッションがあれば上書き（autoSaveと重複しないように）
+  var idx = sessions.findIndex(function(s) { return s.startTime === startISO; });
+  var session = {
+    id:        startISO || Date.now().toString(),
+    date:      dateStr,
+    startTime: startISO,
+    endTime:   endISO,
+    path:      path,
+    distance:  Math.round(distM)
+  };
+  if (idx >= 0) { sessions[idx] = session; } else { sessions.push(session); }
+  // 最大120セッション保持（古いものを削除）
+  if (sessions.length > 120) sessions = sessions.slice(sessions.length - 120);
+  localStorage.setItem('trackSessions', JSON.stringify(sessions));
+}
+
+// autoSave（記録中の途中保存）
+function autoSaveTrackSession() {
+  if (!recordingStartTime || walkingPath.length < 2) return;
+  saveTrackSession(walkingPath.slice(), totalDistance, recordingStartTime, new Date().toISOString());
+}
+
+function loadAllTrackSessions() {
+  try { return JSON.parse(localStorage.getItem('trackSessions') || '[]'); } catch(e) { return []; }
+}
+
+// 期間フィルタ
+function getSessionsForFilter(filter, startDate, endDate) {
+  var sessions = loadAllTrackSessions();
+  var now      = new Date();
+  var todayStr = now.toISOString().substring(0, 10);
+  return sessions.filter(function(s) {
+    if (!s.date) return false;
+    if (filter === 'today')  return s.date === todayStr;
+    if (filter === 'week') {
+      var day = now.getDay(); // 0=Sun
+      var mon = new Date(now); mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+      return s.date >= mon.toISOString().substring(0, 10) && s.date <= todayStr;
+    }
+    if (filter === 'month')  return s.date.substring(0, 7) === todayStr.substring(0, 7);
+    if (filter === 'period') return s.date >= startDate && s.date <= endDate;
+    return true;
+  });
+}
+
+// 足跡パネルを描画
+function renderTrackPanel(filter, startDate, endDate) {
+  currentTrackFilter = filter;
+  var sessions = getSessionsForFilter(filter, startDate, endDate);
+
+  // サマリー
+  var totalDist = sessions.reduce(function(a, s) { return a + (s.distance || 0); }, 0);
+  var summaryBox = document.getElementById('track-summary-box');
+  var mapBtn     = document.getElementById('show-track-map-btn');
+  if (sessions.length > 0) {
+    summaryBox.style.display = 'block';
+    mapBtn.style.display = 'block';
+    document.getElementById('track-total-dist').textContent = (totalDist / 1000).toFixed(2) + 'km';
+    document.getElementById('track-total-sessions').textContent = sessions.length + '回の記録';
+  } else {
+    summaryBox.style.display = 'none';
+    mapBtn.style.display = 'none';
+  }
+
+  // セッション一覧（日付ごとにグループ化）
+  var byDate = {};
+  sessions.forEach(function(s) {
+    if (!byDate[s.date]) byDate[s.date] = [];
+    byDate[s.date].push(s);
+  });
+  var dates = Object.keys(byDate).sort().reverse();
+
+  var COLORS = ['#2196F3','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#F4511E','#039BE5'];
+  var colorMap = {};
+  dates.forEach(function(d, i) { colorMap[d] = COLORS[i % COLORS.length]; });
+
+  var html = '';
+  if (dates.length === 0) {
+    html = '<div style="text-align:center;color:#999;padding:30px 0;font-size:14px">この期間の足跡はありません</div>';
+  } else {
+    dates.forEach(function(date) {
+      var ds = byDate[date];
+      var dayDist = ds.reduce(function(a, s) { return a + (s.distance || 0); }, 0);
+      var dayKm   = (dayDist / 1000).toFixed(2);
+      var label   = formatDateLabel(date);
+      var color   = colorMap[date];
+      html += '<div class="track-item">';
+      html += '<div class="track-item-date"><span class="track-color-dot" style="background:' + color + '"></span>' + label + '</div>';
+      html += '<div class="track-item-meta">';
+      html += '<span>🚶 ' + dayKm + 'km</span>';
+      html += '<span>🔴 ' + ds.length + 'セッション</span>';
+      if (dayDist > 0) {
+        var cal = Math.round((dayDist / 1000) * userWeight * 0.5);
+        html += '<span>🔥 ' + cal + 'kcal</span>';
+      }
+      html += '</div></div>';
+    });
+  }
+  document.getElementById('track-list').innerHTML = html;
+}
+
+function formatDateLabel(dateStr) {
+  var d    = new Date(dateStr + 'T00:00:00');
+  var now  = new Date();
+  var today = now.toISOString().substring(0, 10);
+  var yest  = new Date(now); yest.setDate(now.getDate() - 1);
+  var yesterdayStr = yest.toISOString().substring(0, 10);
+  var days = ['日', '月', '火', '水', '木', '金', '土'];
+  var dow  = days[d.getDay()];
+  var mm   = d.getMonth() + 1;
+  var dd   = d.getDate();
+  if (dateStr === today)      return '今日（' + mm + '月' + dd + '日・' + dow + '）';
+  if (dateStr === yesterdayStr) return '昨日（' + mm + '月' + dd + '日・' + dow + '）';
+  return mm + '月' + dd + '日（' + dow + '）';
+}
+
+// 地図上に軌跡を描画
+function showTrackOnMap() {
+  var filter    = currentTrackFilter;
+  var startDate = document.getElementById('track-start-date').value;
+  var endDate   = document.getElementById('track-end-date').value;
+  var sessions  = getSessionsForFilter(filter, startDate, endDate);
+
+  // 既存の軌跡レイヤーを削除
+  clearTrackPaths();
+
+  if (sessions.length === 0) { showToast('この期間の足跡はありません'); return; }
+
+  var COLORS = ['#2196F3','#E53935','#43A047','#FB8C00','#8E24AA','#00ACC1','#F4511E','#039BE5'];
+  // 日付ごとに色を分ける
+  var dates = [];
+  var byDate = {};
+  sessions.forEach(function(s) {
+    if (!byDate[s.date]) { byDate[s.date] = []; dates.push(s.date); }
+    byDate[s.date].push(s);
+  });
+  dates = Array.from(new Set(dates)).sort();
+
+  var allPoints = [];
+  dates.forEach(function(date, di) {
+    var color = COLORS[di % COLORS.length];
+    byDate[date].forEach(function(s) {
+      if (!s.path || s.path.length < 2) return;
+      var poly = L.polyline(s.path, { color: color, weight: 4, opacity: 0.85 }).addTo(map);
+      trackPathLayers.push(poly);
+      s.path.forEach(function(p) { allPoints.push(p); });
+    });
+  });
+
+  if (allPoints.length > 0) {
+    map.fitBounds(L.latLngBounds(allPoints), { padding: [30, 30] });
+  }
+
+  // 地図タブに切り替え
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelector('.nav-btn[data-view="map"]').classList.add('active');
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+  var fab = document.getElementById('fab');
+  var distOverlay = document.getElementById('dist-overlay');
+  fab.classList.remove('hidden');
+  distOverlay.style.display = 'flex';
+  setTimeout(function() { if (map) map.invalidateSize(); }, 120);
+
+  showToast('👣 ' + sessions.length + 'セッションの軌跡を表示しました');
+}
+
+function clearTrackPaths() {
+  trackPathLayers.forEach(function(layer) { map.removeLayer(layer); });
+  trackPathLayers = [];
+}
+
+function applyTrackFilter() {
+  var s = document.getElementById('track-start-date').value;
+  var e = document.getElementById('track-end-date').value;
+  if (!s || !e) { showToast('開始日・終了日を指定してください'); return; }
+  renderTrackPanel('period', s, e);
+}
+
+function initTrackPanel() {
+  document.querySelectorAll('[data-track-filter]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('[data-track-filter]').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      var f = btn.getAttribute('data-track-filter');
+      document.getElementById('track-period-row').style.display = f === 'period' ? 'flex' : 'none';
+      if (f !== 'period') renderTrackPanel(f);
+    });
+  });
 }
 
 function loadTodayDistance() {
