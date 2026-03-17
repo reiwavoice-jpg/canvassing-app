@@ -561,9 +561,9 @@
   
   <!-- タブバー -->
   <div class="tab-bar">
-    <button class="tab-btn active" data-view="meals">🍽️ 食事</button>
-    <button class="tab-btn" data-view="exercise">🏃 運動</button>
-    <button class="tab-btn" data-view="weight">📊 体重</button>
+    <button class="tab-btn active" id="tab-meals" onclick="switchTab('meals')">🍽️ 食事</button>
+    <button class="tab-btn" id="tab-exercise" onclick="switchTab('exercise')">🏃 運動</button>
+    <button class="tab-btn" id="tab-weight" onclick="switchTab('weight')">📊 体重</button>
   </div>
   
   <!-- コンテンツ -->
@@ -796,27 +796,28 @@
       }
     });
     
+    // === タブ切り替え（グローバル関数）===
+    function switchTab(view) {
+      // タブボタンのactive切り替え
+      ['meals', 'exercise', 'weight'].forEach(function(v) {
+        var btn = document.getElementById('tab-' + v);
+        if (btn) btn.classList.toggle('active', v === view);
+      });
+      // ビューのactive切り替え
+      ['meals', 'exercise', 'weight'].forEach(function(v) {
+        var el = document.getElementById(v);
+        if (el) el.classList.toggle('active', v === view);
+      });
+      // ページトップにスクロール
+      window.scrollTo(0, 0);
+      // 体重グラフ更新
+      if (view === 'weight') {
+        renderWeightChart();
+      }
+    }
+
     // === イベントリスナー ===
     function setupEventListeners() {
-      // タブ切り替え
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          
-          const view = btn.dataset.view;
-          document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-          document.getElementById(view).classList.add('active');
-
-          // タブ切り替え時はページトップにスクロール
-          window.scrollTo({ top: 0, behavior: 'instant' });
-          document.querySelector('.content') && (document.querySelector('.content').scrollTop = 0);
-
-          if (view === 'weight') {
-            renderWeightChart();
-          }
-        });
-      });
       
       // 食事フォーム
       document.getElementById('mealForm').addEventListener('submit', (e) => {
