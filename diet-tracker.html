@@ -469,8 +469,8 @@
     // ============================================================
     var LIFF_ID   = '2009413587-PeiLyhhc';
     var GAS_URL   = 'https://script.google.com/macros/s/AKfycbyQ7xh8mkxhEhBDiqAs1O7Bdd9r5L3TxSPrmgYJxrXpMA7Ks7HxD5ULhTs9oauS-FaR/exec';
-    // ★ setupAppToken() をGASで実行後、表示されたトークンをここに貼り付けてください
-    var APP_TOKEN = 'cdb7526b1062464b8dbc42110589dbd52a7e8249047e44aba7c9b912222f28f4';
+    // ★ LINE IDトークン（LIFF初期化後に自動設定・HTMLには秘密情報を書かない）
+    var LINE_ID_TOKEN = '';
 
     // ============================================================
     // グローバル変数
@@ -532,13 +532,23 @@
       if (typeof liff === 'undefined' || !LIFF_ID || LIFF_ID === 'YOUR_DIET_LIFF_ID_HERE') return;
       liff.init({ liffId: LIFF_ID })
         .then(function() {
-          if (liff.isInClient() || liff.isLoggedIn()) return liff.getProfile();
+          if (liff.isInClient() || liff.isLoggedIn()) {
+            LINE_ID_TOKEN = liff.getIDToken() || ''; // ★ IDトークンを取得
+            return liff.getProfile();
+          }
           return null;
         })
         .then(function(profile) {
           if (profile && profile.userId) lineUserId = profile.userId;
         })
         .catch(function(err) { console.warn('LIFF init 失敗:', err); });
+    }
+
+    // ★ 最新IDトークンを取得するヘルパー
+    function getIdToken() {
+      return (typeof liff !== 'undefined' && liff.getIDToken)
+        ? (liff.getIDToken() || LINE_ID_TOKEN)
+        : LINE_ID_TOKEN;
     }
 
     // ============================================================
@@ -708,7 +718,7 @@
       showLoading();
       fetch(GAS_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: 'analyzeMeal', image: currentPhotoData.split(',')[1], token: APP_TOKEN })
+        body: JSON.stringify({ action: 'analyzeMeal', image: currentPhotoData.split(',')[1], idToken: getIdToken() })
       })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -777,7 +787,7 @@
       showLoading();
       fetch(GAS_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: 'analyzeMealText', text: name, token: APP_TOKEN })
+        body: JSON.stringify({ action: 'analyzeMealText', text: name, idToken: getIdToken() })
       })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -963,7 +973,7 @@
       data.userId = lineUserId || '';
       fetch(GAS_URL, {
         method: 'POST',
-        body: JSON.stringify(Object.assign({ action: 'saveDiet', token: APP_TOKEN }, data))
+        body: JSON.stringify(Object.assign({ action: 'saveDiet', idToken: getIdToken() }, data))
       })
       .then(function(r) { return r.json(); })
       .then(function(d) {

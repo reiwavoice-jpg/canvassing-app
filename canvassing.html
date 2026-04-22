@@ -840,8 +840,9 @@
 var LIFF_ID   = '2009413587-0Plg0ecV';
 var GAS_URL   = 'https://script.google.com/macros/s/AKfycbyQ7xh8mkxhEhBDiqAs1O7Bdd9r5L3TxSPrmgYJxrXpMA7Ks7HxD5ULhTs9oauS-FaR/exec';
 // ★ setupAppToken() をGASで実行後、表示されたトークンをここに貼り付けてください
-var APP_TOKEN = 'cdb7526b1062464b8dbc42110589dbd52a7e8249047e44aba7c9b912222f28f4';
 // ※ Google Geocoding APIキーは GAS の Script Properties に保存済み（コードに書かない）
+// ★ LINE IDトークン（LIFF初期化後に自動設定・HTMLには秘密情報を書かない）
+var LINE_ID_TOKEN = '';
 
 var DEFAULT_LAT = 35.4849;
 var DEFAULT_LNG = 139.4081;
@@ -1655,7 +1656,10 @@ function endSession() {
 // GAS API共通呼び出し
 // ============================================================
 function gasAPI(params) {
-  params.token = APP_TOKEN; // ★ 認証トークンを自動付与
+  // ★ LINEが発行したIDトークンを毎回最新で付与（HTMLに秘密情報なし）
+  params.idToken = (typeof liff !== 'undefined' && liff.getIDToken)
+    ? (liff.getIDToken() || LINE_ID_TOKEN)
+    : LINE_ID_TOKEN;
   var qs = Object.keys(params).map(function(k) {
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
   }).join('&');
@@ -2043,7 +2047,10 @@ function initLIFF() {
   if (typeof liff === 'undefined' || !LIFF_ID || LIFF_ID === 'LIFF_ID_HERE') return;
   liff.init({ liffId: LIFF_ID })
     .then(function() {
-      if (liff.isInClient() || liff.isLoggedIn()) return liff.getProfile();
+      if (liff.isInClient() || liff.isLoggedIn()) {
+        LINE_ID_TOKEN = liff.getIDToken() || ''; // ★ IDトークンを取得
+        return liff.getProfile();
+      }
       return null;
     })
     .then(function(profile) {

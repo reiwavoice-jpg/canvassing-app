@@ -708,8 +708,8 @@
 // ============================================================
 var LIFF_ID   = '2009413587-0Plg0ecV';  // canvassing.html と同じ LIFF ID
 var GAS_URL   = 'https://script.google.com/macros/s/AKfycbyQ7xh8mkxhEhBDiqAs1O7Bdd9r5L3TxSPrmgYJxrXpMA7Ks7HxD5ULhTs9oauS-FaR/exec';
-// ★ setupAppToken() をGASで実行後、表示されたトークンをここに貼り付けてください
-var APP_TOKEN = 'cdb7526b1062464b8dbc42110589dbd52a7e8249047e44aba7c9b912222f28f4';
+// ★ LINE IDトークン（LIFF初期化後に自動設定・HTMLには秘密情報を書かない）
+var LINE_ID_TOKEN = '';
 
 var userId      = '';
 var currentMode = 'parliament_rag';
@@ -733,6 +733,7 @@ window.addEventListener('load', function() {
         liff.login({ redirectUri: location.href });
         return;
       }
+      LINE_ID_TOKEN = liff.getIDToken() || ''; // ★ IDトークンを取得
       return liff.getProfile();
     })
     .then(function(profile) {
@@ -749,7 +750,10 @@ window.addEventListener('load', function() {
 // GAS API 呼び出し
 // ============================================================
 function gasAPI(params) {
-  params.token = APP_TOKEN; // ★ 認証トークンを自動付与
+  // ★ LINEが発行したIDトークンを毎回最新で付与（HTMLに秘密情報なし）
+  params.idToken = (typeof liff !== 'undefined' && liff.getIDToken)
+    ? (liff.getIDToken() || LINE_ID_TOKEN)
+    : LINE_ID_TOKEN;
   var qs = Object.keys(params).map(function(k) {
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
   }).join('&');
@@ -1150,7 +1154,7 @@ async function doUpload() {
           fileData: base64,
           pin:      pin,
           userId:   userId,
-          token:    APP_TOKEN
+          idToken:  (typeof liff !== 'undefined' && liff.getIDToken) ? (liff.getIDToken() || LINE_ID_TOKEN) : LINE_ID_TOKEN
         })
       });
       var data = await res.json();
