@@ -706,8 +706,10 @@
 // ============================================================
 // 設定
 // ============================================================
-var LIFF_ID = '2009413587-0Plg0ecV';  // canvassing.html と同じ LIFF ID
-var GAS_URL = 'https://script.google.com/macros/s/AKfycbxjjLVWPU06BgmwtYrnyjC8LIuV54mzG0YMa_SkWuL5yN8y6m9GEbM_C0cRtX7UlWOM/exec';
+var LIFF_ID   = '2009413587-0Plg0ecV';  // canvassing.html と同じ LIFF ID
+var GAS_URL   = 'https://script.google.com/macros/s/AKfycbyQ7xh8mkxhEhBDiqAs1O7Bdd9r5L3TxSPrmgYJxrXpMA7Ks7HxD5ULhTs9oauS-FaR/exec';
+// ★ setupAppToken() をGASで実行後、表示されたトークンをここに貼り付けてください
+var APP_TOKEN = 'cdb7526b1062464b8dbc42110589dbd52a7e8249047e44aba7c9b912222f28f4';
 
 var userId      = '';
 var currentMode = 'parliament_rag';
@@ -747,6 +749,7 @@ window.addEventListener('load', function() {
 // GAS API 呼び出し
 // ============================================================
 function gasAPI(params) {
+  params.token = APP_TOKEN; // ★ 認証トークンを自動付与
   var qs = Object.keys(params).map(function(k) {
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
   }).join('&');
@@ -1146,7 +1149,8 @@ async function doUpload() {
           fileName: file.name,
           fileData: base64,
           pin:      pin,
-          userId:   userId
+          userId:   userId,
+          token:    APP_TOKEN
         })
       });
       var data = await res.json();

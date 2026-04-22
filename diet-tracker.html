@@ -467,8 +467,10 @@
     // ============================================================
     // 設定
     // ============================================================
-    var LIFF_ID = '2009413587-PeiLyhhc';
-    var GAS_URL = 'https://script.google.com/macros/s/AKfycbxjjLVWPU06BgmwtYrnyjC8LIuV54mzG0YMa_SkWuL5yN8y6m9GEbM_C0cRtX7UlWOM/exec';
+    var LIFF_ID   = '2009413587-PeiLyhhc';
+    var GAS_URL   = 'https://script.google.com/macros/s/AKfycbyQ7xh8mkxhEhBDiqAs1O7Bdd9r5L3TxSPrmgYJxrXpMA7Ks7HxD5ULhTs9oauS-FaR/exec';
+    // ★ setupAppToken() をGASで実行後、表示されたトークンをここに貼り付けてください
+    var APP_TOKEN = 'cdb7526b1062464b8dbc42110589dbd52a7e8249047e44aba7c9b912222f28f4';
 
     // ============================================================
     // グローバル変数
@@ -706,7 +708,7 @@
       showLoading();
       fetch(GAS_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: 'analyzeMeal', image: currentPhotoData.split(',')[1] })
+        body: JSON.stringify({ action: 'analyzeMeal', image: currentPhotoData.split(',')[1], token: APP_TOKEN })
       })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -775,7 +777,7 @@
       showLoading();
       fetch(GAS_URL, {
         method: 'POST',
-        body: JSON.stringify({ action: 'analyzeMealText', text: name })
+        body: JSON.stringify({ action: 'analyzeMealText', text: name, token: APP_TOKEN })
       })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -961,7 +963,7 @@
       data.userId = lineUserId || '';
       fetch(GAS_URL, {
         method: 'POST',
-        body: JSON.stringify(Object.assign({ action: 'saveDiet' }, data))
+        body: JSON.stringify(Object.assign({ action: 'saveDiet', token: APP_TOKEN }, data))
       })
       .then(function(r) { return r.json(); })
       .then(function(d) {
